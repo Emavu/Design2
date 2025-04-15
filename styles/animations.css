@@ -1,0 +1,58 @@
+.fade-in {
+    opacity: 0;
+    animation: fadeIn 1s forwards;
+}
+
+.slide-up {
+    transform: translateY(50px);
+    opacity: 0;
+    animation: slideUp 1s forwards;
+}
+
+.moving-line {
+    display: flex;
+    overflow: hidden;
+    background: #d3ff00;
+    white-space: nowrap;
+}
+
+.moving-line-content {
+    display: flex;
+    animation: moveLeft 30s linear infinite;
+    padding: 1rem 0;
+}
+
+.moving-line-item {
+    display: flex;
+    align-items: center;
+    padding: 0 2rem;
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.moving-line-icon {
+    margin-right: 1rem;
+    font-size: 1.5rem;
+}
+
+@keyframes fadeIn {
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes moveLeft {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}
