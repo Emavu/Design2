@@ -1,0 +1,85 @@
+.nav-link {
+    position: relative;
+    padding: 0.5rem 1rem;
+    color: #333;
+    transition: color 0.3s;
+}
+
+.nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background-color: #000000;
+    transition: width 0.3s ease;
+}
+
+.nav-link:hover {
+    color: #000;
+}
+
+.nav-link:hover::after {
+    width: 100%;
+}
+
+/* Product card hover effects */
+.product-card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.product-card:hover {
+    transform: translateY(-4px);
+}
+
+/* Logo animation */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.logo-spin {
+    transition: transform 0.6s ease;
+}
+
+.logo-spin:hover {
+    transform: rotate(360deg);
+}
+
+/* Search input focus effect */
+.search-input:focus {
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Category button hover effect */
+.category-button {
+    transition: all 0.3s ease;
+}
+
+.category-button:hover {
+    transform: translateY(-1px);
+}
+
+/* Card hover effects */
+.card {
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Image hover zoom effect */
+.image-zoom {
+    transition: transform 0.3s ease;
+}
+
+.image-zoom:hover {
+    transform: scale(1.05);
+}

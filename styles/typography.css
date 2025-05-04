@@ -1,0 +1,139 @@
+/* Base font for body text */
+body {
+    font-family: 'Noto Sans', sans-serif;
+    font-weight: 100;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Emafontlt', sans-serif;
+    font-weight: bold;
+}
+
+/* Navigation */
+.nav-link {
+    font-family:'Emafontlt', sans-serif;
+    font-weight: 100;
+}
+
+/* Cards and content */
+.card, .post, .blog-post, .product-card {
+    font-family: 'Noto Sans', sans-serif;
+    font-weight: 100;
+}
+
+/* Buttons */
+.button {
+    font-family: 'Montserrat', sans-serif;
+    font-optical-sizing: auto;
+    font-weight: 50;
+    font-style: normal;
+    letter-spacing: 0.5px;
+    font-size: 0.9em;
+}
+
+/* Form elements */
+input, textarea, select {
+    font-family: 'Noto Sans', sans-serif;
+    font-weight: 100;
+}
+
+/* Footer */
+footer {
+    font-family: 'Noto Sans', sans-serif;
+    font-weight: 100;
+}
+
+/* Specific components */
+.hero-title {
+    font-family: 'Emafontlt', sans-serif;
+    font-weight: bold;
+}
+
+.hero-subtitle {
+    font-family: 'Noto Sans', sans-serif;
+    font-weight: 100;
+}
+
+.service-title {
+    font-family: 'Emafontlt', sans-serif;
+    font-weight: bold;
+}
+
+.service-description {
+    font-family: 'Noto Sans', sans-serif;
+    font-weight: 100;
+}
+
+.work-title {
+    font-family: 'Emafontlt', sans-serif;
+    font-weight: bold;
+}
+
+.work-description {
+    font-family: 'Noto Sans', sans-serif;
+    font-weight: 100;
+}
+
+.blog-title {
+    font-family: 'Emafontlt', sans-serif;
+    font-weight: bold;
+}
+
+.blog-excerpt {
+    font-family: 'Noto Sans', sans-serif;
+    font-weight: 100;
+}
+
+.product-name {
+    font-family: 'Emafontlt', sans-serif;
+    font-weight: bold;
+}
+
+.product-description {
+    font-family: 'Noto Sans', sans-serif;
+    font-weight: 100;
+}
+
+.contact-title {
+    font-family: 'Emafontlt', sans-serif;
+    font-weight: bold;
+}
+
+.contact-text {
+    font-family: 'Noto Sans', sans-serif;
+    font-weight: 100;
+}
+
+/* Small text elements */
+small, .text-sm {
+    font-family: 'Noto Sans', sans-serif;
+    font-weight: 100;
+}
+
+/* Medium text elements */
+.text-md {
+    font-family: 'Noto Sans', sans-serif;
+    font-weight: 100;
+}
+
+/* Large text elements */
+.text-lg {
+    font-family: 'Emafontlt', sans-serif;
+    font-weight: bold;
+}
+
+/* Button text */
+.button.text-lg {
+    font-family: 'Montserrat', sans-serif;
+    font-optical-sizing: auto;
+    font-weight: 50;
+    font-style: normal;
+    letter-spacing: 0.5px;
+    font-size: 0.9em;
+}
+
+.moving-line-item {
+    font-family: 'Emafontlt', sans-serif;
+    font-weight: bold;
+}
