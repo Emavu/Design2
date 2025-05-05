@@ -23,7 +23,7 @@ function Login({ onLogin }) {
         setError('');
         setLoading(true);
         try {
-            const provider = new firebase.auth.GoogleAuthProvider();
+            const provider = new firebase.GoogleAuthProvider(); 
             await window.firebase.auth.signInWithPopup(provider);
             onLogin();
         } catch (error) {

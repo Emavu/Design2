@@ -34,14 +34,15 @@
         const db = firebase.firestore();
         const auth = firebase.auth();
         const storage = firebase.storage();
+        const GoogleAuthProvider = firebase.auth.GoogleAuthProvider;
 
         // Make Firebase services available globally
-        window.firebase = {
-            db,
-            auth,
-            storage,
-            firestore: firebase.firestore
-        };
+        window.firebase = Object.assign(firebase, {
+    db,
+    auth,
+    storage,
+    GoogleAuthProvider 
+});
     </script>
 <script>
   firebase.db.collection("database").get().then((querySnapshot) => {
@@ -86,7 +87,6 @@
     <div id="root"></div>
     <script type="text/babel" src="utils/3d.js"></script>
     <script type="text/babel" src="utils/initFirestore.js"></script>
-    <script type="text/babel" src="components/Login.js"></script>
     <script type="text/babel" src="components/Navigation.js"></script>
     <script type="text/babel" src="components/Hero.js"></script>
     <script type="text/babel" src="components/ServicesLine.js"></script>
@@ -114,5 +114,7 @@
     <script type="text/babel" src="components/Header.js"></script>
     <script type="text/babel" src="components/pages/BlogPostDetail.js"></script>
     <script type="text/babel" src="components/admin/WorkEditor.js"></script>
+    <script type="text/babel" src="components/Login.js"></script>
+
 </body>
 </html>
