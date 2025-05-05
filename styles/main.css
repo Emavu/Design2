@@ -5,6 +5,15 @@ body {
     overflow-x: hidden;
 }
 
+/* Section backgrounds */
+section, .section, [class*="section"], 
+.hero, .about, .works, .blog, .shop, .contact,
+.card, .post, .blog-post, .product-card,
+.header-block, .nav-links, 
+footer, .footer {
+    background-color: #FFFFFF !important;
+}
+
 .container {
     max-width: 1200px;
     margin: 0 auto;
@@ -16,7 +25,7 @@ body {
     top: 0;
     left: 0;
     width: 100%;
-    background-color: rgba(255, 255, 255, 0.9);
+    background-color: #FFFFFF;
     backdrop-filter: blur(10px);
     padding: 1rem 0;
     z-index: 1000;
@@ -140,8 +149,8 @@ body {
     padding: 6rem 0;
 }
 
+/* Remove pattern background */
 .bg-pattern {
-    background-color: #f7f7f7;
-    background-image: radial-gradient(#e0e0e0 1px, transparent 1px);
-    background-size: 20px 20px;
+    background-color: #FFFFFF;
+    background-image: none;
 }

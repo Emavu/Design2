@@ -3,17 +3,8 @@ function Footer() {
         return (
             <footer className="bg-white border-t border-gray-200 py-12" data-name="footer">
                 <div className="container mx-auto px-4">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-                        <div data-name="footer-brand">
-                            <img 
-                                src="https://raw.githubusercontent.com/Emavu/Design2/5869a85b44237f2f161f6cdfe9dc4cf7f4537c5d/pictures/logo.png"
-                                alt="Logo"
-                                className="h-12 w-12 mb-4"
-                            />
-                            <p className="text-gray-600 max-w-xs">
-                                Creating innovative designs and solutions for modern challenges.
-                            </p>
-                        </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        
                         <div data-name="footer-links">
                             <h3 className="font-bold mb-4">Quick Links</h3>
                             <ul className="space-y-2">

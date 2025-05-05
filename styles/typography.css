@@ -1,139 +1,151 @@
+/* Import Roboto */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap');
+
+/* Add Emafontlt_Regular font-face if missing */
+@font-face {
+    font-family: 'Emafontlt';
+    src: url('../font/Emafontlt-Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
 /* Base font for body text */
-body {
-    font-family: 'Noto Sans', sans-serif;
+* {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
+}
+
+/* Hero heading uses Emafontlt Regular */
+[data-name="hero-heading"] {
+    font-family: 'Emafontlt', sans-serif;
+    font-weight: normal;
+}
+
+/* Navigation links */
+.nav-link[href*="works"],
+.nav-link[href*="blog"],
+.nav-link[href*="shop"],
+.nav-link[href*="about"],
+.nav-link[href*="contact"] {
+    font-family: 'Emafontlt', sans-serif;
     font-weight: 100;
 }
 
 /* Headings */
 h1, h2, h3, h4, h5, h6 {
-    font-family: 'Emafontlt', sans-serif;
-    font-weight: bold;
-}
-
-/* Navigation */
-.nav-link {
-    font-family:'Emafontlt', sans-serif;
-    font-weight: 100;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
 /* Cards and content */
-.card, .post, .blog-post, .product-card {
-    font-family: 'Noto Sans', sans-serif;
-    font-weight: 100;
+.card, .post, .blog-post, .product-card, p, span, div {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
 /* Buttons */
-.button {
-    font-family: 'Montserrat', sans-serif;
-    font-optical-sizing: auto;
-    font-weight: 50;
-    font-style: normal;
-    letter-spacing: 0.5px;
-    font-size: 0.9em;
+.button, button, .btn {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
 /* Form elements */
-input, textarea, select {
-    font-family: 'Noto Sans', sans-serif;
-    font-weight: 100;
+input, textarea, select, label {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
 /* Footer */
 footer {
-    font-family: 'Noto Sans', sans-serif;
-    font-weight: 100;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
 /* Specific components */
-.hero-title {
-    font-family: 'Emafontlt', sans-serif;
-    font-weight: bold;
+.hero-title, .hero h1, .hero h2 {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-.hero-subtitle {
-    font-family: 'Noto Sans', sans-serif;
-    font-weight: 100;
+.hero-subtitle, .hero p {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-.service-title {
-    font-family: 'Emafontlt', sans-serif;
-    font-weight: bold;
+.service-title, .service h3, .service h4 {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-.service-description {
-    font-family: 'Noto Sans', sans-serif;
-    font-weight: 100;
+.service-description, .service p {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-.work-title {
-    font-family: 'Emafontlt', sans-serif;
-    font-weight: bold;
+.work-title, .work h3, .work h4 {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-.work-description {
-    font-family: 'Noto Sans', sans-serif;
-    font-weight: 100;
+.work-description, .work p {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-.blog-title {
-    font-family: 'Emafontlt', sans-serif;
-    font-weight: bold;
+.blog-title, .blog h3, .blog h4 {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-.blog-excerpt {
-    font-family: 'Noto Sans', sans-serif;
-    font-weight: 100;
+.blog-excerpt, .blog p {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-.product-name {
-    font-family: 'Emafontlt', sans-serif;
-    font-weight: bold;
+.product-name, .product h3, .product h4 {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-.product-description {
-    font-family: 'Noto Sans', sans-serif;
-    font-weight: 100;
+.product-description, .product p {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-.contact-title {
-    font-family: 'Emafontlt', sans-serif;
-    font-weight: bold;
+.contact-title, .contact h3, .contact h4 {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-.contact-text {
-    font-family: 'Noto Sans', sans-serif;
-    font-weight: 100;
+.contact-text, .contact p {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-/* Small text elements */
+/* Text sizes */
 small, .text-sm {
-    font-family: 'Noto Sans', sans-serif;
-    font-weight: 100;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-/* Medium text elements */
 .text-md {
-    font-family: 'Noto Sans', sans-serif;
-    font-weight: 100;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-/* Large text elements */
 .text-lg {
-    font-family: 'Emafontlt', sans-serif;
-    font-weight: bold;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
-/* Button text */
 .button.text-lg {
-    font-family: 'Montserrat', sans-serif;
-    font-optical-sizing: auto;
-    font-weight: 50;
-    font-style: normal;
-    letter-spacing: 0.5px;
-    font-size: 0.9em;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }
 
+/* Moving line */
 .moving-line-item {
-    font-family: 'Emafontlt', sans-serif;
-    font-weight: bold;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
 }

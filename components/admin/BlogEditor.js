@@ -1,198 +1,217 @@
-function BlogEditor({ onClose }) {
-    try {
-        const [post, setPost] = React.useState({
-            title: '',
-            content: '',
-            imageUrl: '',
-            category: '',
-            newCategory: ''
-        });
-        const [categories, setCategories] = React.useState([
-            'Technology',
-            'Design',
-            'Business',
-            'Lifestyle',
-            'Tutorial'
-        ]);
-        const [showNewCategory, setShowNewCategory] = React.useState(false);
-        const [loading, setLoading] = React.useState(false);
-        const [error, setError] = React.useState(null);
+function BlogEditor({ post, onClose }) {
+    const [postData, setPostData] = React.useState({
+        title: '',
+        content: '',
+        excerpt: '',
+        imageUrl: '',
+        category: '',
+        tags: []
+    });
+    const [loading, setLoading] = React.useState(false);
+    const [error, setError] = React.useState('');
+    const [categories, setCategories] = React.useState([]);
+    const [showNewCategory, setShowNewCategory] = React.useState(false);
+    const [newCategory, setNewCategory] = React.useState('');
 
-        const handleSubmit = async (e) => {
-            e.preventDefault();
-            setLoading(true);
-            setError(null);
+    React.useEffect(() => {
+        if (post) {
+            setPostData({
+                title: post.title || '',
+                content: post.content || '',
+                excerpt: post.excerpt || '',
+                imageUrl: post.imageUrl || '',
+                category: post.category || '',
+                tags: post.tags || []
+            });
+        }
+        loadCategories();
+    }, [post]);
 
-            try {
-                if (!post.title || !post.content) {
-                    throw new Error('Please fill in all required fields');
-                }
+    const loadCategories = async () => {
+        try {
+            const cats = await window.db.getCategories();
+            setCategories(cats);
+        } catch (err) {
+            console.error('Error loading categories:', err);
+        }
+    };
 
-                const category = showNewCategory ? post.newCategory : post.category;
-                if (!category) {
-                    throw new Error('Please select or create a category');
-                }
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
 
-                if (showNewCategory && !categories.includes(post.newCategory)) {
-                    setCategories([...categories, post.newCategory]);
-                }
-
-                await createBlogPost(
-                    post.title,
-                    post.content,
-                    post.imageUrl,
-                    category
-                );
-
-                setPost({
-                    title: '',
-                    content: '',
-                    imageUrl: '',
-                    category: '',
-                    newCategory: ''
-                });
-                onClose();
-            } catch (err) {
-                console.error('Error creating blog post:', err);
-                setError(err.message);
-            } finally {
-                setLoading(false);
+        try {
+            if (!postData.title || !postData.content) {
+                throw new Error('Title and content are required');
             }
-        };
 
-        const handleChange = (e) => {
-            const { name, value } = e.target;
-            setPost(prev => ({
-                ...prev,
-                [name]: value
-            }));
-        };
+            // Create post data object
+            const postDataToSave = {
+                ...postData,
+                createdAt: post ? post.createdAt : window.firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: window.firebase.firestore.FieldValue.serverTimestamp()
+            };
 
-        const toggleNewCategory = () => {
-            setShowNewCategory(!showNewCategory);
-            setPost(prev => ({
-                ...prev,
-                category: '',
-                newCategory: ''
-            }));
-        };
+            if (post) {
+                await window.db.updateBlogPost(post.id, postDataToSave);
+            } else {
+                await window.db.createBlogPost(postDataToSave);
+            }
 
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" data-name="blog-editor">
-                <div className="bg-white p-8 rounded-lg max-w-xl w-full max-h-[90vh] overflow-y-auto" data-name="blog-editor-modal">
-                    <div className="flex justify-between items-center mb-6" data-name="blog-editor-header">
-                        <h2 className="text-2xl font-bold">Create New Blog Post</h2>
-                        <button 
-                            onClick={onClose}
-                            className="text-gray-500 hover:text-gray-700"
-                            data-name="blog-editor-close"
-                        >
-                            <i className="fas fa-times"></i>
-                        </button>
+            onClose();
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleImageUpload = (imageUrl) => {
+        setPostData(prev => ({ ...prev, imageUrl }));
+    };
+
+    const handleAddCategory = async () => {
+        if (!newCategory.trim()) return;
+
+        try {
+            const categoryName = newCategory.trim();
+            await window.db.addCategory({ name: categoryName });
+            await loadCategories(); // Refresh categories list
+            setPostData(prev => ({ ...prev, category: categoryName }));
+            setNewCategory('');
+            setShowNewCategory(false);
+        } catch (err) {
+            setError('Failed to add category: ' + err.message);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold">{post ? 'Edit Post' : 'Create New Post'}</h2>
+                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+                        <i className="fas fa-times"></i>
+                    </button>
+                </div>
+
+                {error && (
+                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
+                        {error}
+                    </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                        <input
+                            type="text"
+                            value={postData.title}
+                            onChange={(e) => setPostData(prev => ({ ...prev, title: e.target.value }))}
+                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
+                            required
+                        />
                     </div>
 
-                    {error && (
-                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4" data-name="blog-editor-error">
-                            {error}
-                        </div>
-                    )}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
+                        <textarea
+                            value={postData.content}
+                            onChange={(e) => setPostData(prev => ({ ...prev, content: e.target.value }))}
+                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-black h-32"
+                            required
+                        />
+                    </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-4" data-name="blog-editor-form">
-                        <div>
-                            <label className="block text-sm font-medium mb-2">Title *</label>
-                            <input
-                                type="text"
-                                name="title"
-                                value={post.title}
-                                onChange={handleChange}
-                                className="w-full p-3 border border-gray-300 rounded"
-                                required
-                                data-name="blog-title-input"
-                            />
-                        </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Excerpt</label>
+                        <textarea
+                            value={postData.excerpt}
+                            onChange={(e) => setPostData(prev => ({ ...prev, excerpt: e.target.value }))}
+                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-black h-20"
+                        />
+                    </div>
 
-                        <div>
-                            <label className="block text-sm font-medium mb-2">Content *</label>
-                            <textarea
-                                name="content"
-                                value={post.content}
-                                onChange={handleChange}
-                                className="w-full p-3 border border-gray-300 rounded h-64"
-                                required
-                                data-name="blog-content-input"
-                            ></textarea>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                        <div className="flex gap-2">
+                            <select
+                                value={postData.category}
+                                onChange={(e) => setPostData(prev => ({ ...prev, category: e.target.value }))}
+                                className="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
+                            >
+                                <option value="">Select a category</option>
+                                {categories.map((cat) => (
+                                    <option key={cat.id} value={cat.name}>{cat.name}</option>
+                                ))}
+                            </select>
+                            <button
+                                type="button"
+                                onClick={() => setShowNewCategory(true)}
+                                className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+                            >
+                                <i className="fas fa-plus"></i>
+                            </button>
                         </div>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-2">Image URL</label>
-                            <input
-                                type="url"
-                                name="imageUrl"
-                                value={post.imageUrl}
-                                onChange={handleChange}
-                                className="w-full p-3 border border-gray-300 rounded"
-                                data-name="blog-image-input"
-                            />
-                        </div>
-
-                        <div>
-                            <div className="flex justify-between items-center mb-2">
-                                <label className="block text-sm font-medium">Category *</label>
-                                <button
-                                    type="button"
-                                    onClick={toggleNewCategory}
-                                    className="text-sm text-blue-600 hover:text-blue-800"
-                                    data-name="toggle-category-button"
-                                >
-                                    {showNewCategory ? 'Select Existing Category' : 'Create New Category'}
-                                </button>
-                            </div>
-                            
-                            {showNewCategory ? (
+                        {showNewCategory && (
+                            <div className="mt-2 flex gap-2">
                                 <input
                                     type="text"
-                                    name="newCategory"
-                                    value={post.newCategory}
-                                    onChange={handleChange}
-                                    placeholder="Enter new category name"
-                                    className="w-full p-3 border border-gray-300 rounded"
-                                    required
-                                    data-name="new-category-input"
+                                    value={newCategory}
+                                    onChange={(e) => setNewCategory(e.target.value)}
+                                    placeholder="New category name"
+                                    className="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
                                 />
-                            ) : (
-                                <select
-                                    name="category"
-                                    value={post.category}
-                                    onChange={handleChange}
-                                    className="w-full p-3 border border-gray-300 rounded"
-                                    required
-                                    data-name="category-select"
+                                <button
+                                    type="button"
+                                    onClick={handleAddCategory}
+                                    className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
                                 >
-                                    <option value="">Select a category</option>
-                                    {categories.map(category => (
-                                        <option key={category} value={category}>
-                                            {category}
-                                        </option>
-                                    ))}
-                                </select>
-                            )}
-                        </div>
+                                    Add
+                                </button>
+                            </div>
+                        )}
+                    </div>
 
-                        <button 
-                            type="submit"
-                            className="button w-full"
-                            disabled={loading}
-                            data-name="blog-submit-button"
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Featured Image</label>
+                        <DragDropUploader onUploadComplete={handleImageUpload} type="image" />
+                        {postData.imageUrl && (
+                            <div className="mt-2">
+                                <img 
+                                    src={postData.imageUrl} 
+                                    alt="Preview" 
+                                    className="max-h-40 rounded-lg"
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex justify-end gap-4">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-6 py-2 border rounded-lg hover:bg-gray-100"
                         >
-                            {loading ? 'Creating...' : 'Create Post'}
+                            Cancel
                         </button>
-                    </form>
-                </div>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                        >
+                            {loading ? (
+                                <i className="fas fa-spinner fa-spin mr-2"></i>
+                            ) : null}
+                            {post ? 'Update Post' : 'Create Post'}
+                        </button>
+                    </div>
+                </form>
             </div>
-        );
-    } catch (error) {
-        console.error('BlogEditor component error:', error);
-        reportError(error);
-        return null;
-    }
+        </div>
+    );
 }
+
+// Make BlogEditor component available globally
+window.BlogEditor = BlogEditor;

@@ -83,6 +83,21 @@ function ProductEditor({ onClose }) {
             }));
         };
 
+        const handleAddCategory = async () => {
+            if (!newCategory.trim()) return;
+
+            try {
+                const categoryName = newCategory.trim();
+                await window.db.addCategory({ name: categoryName });
+                await loadCategories(); // Refresh categories list
+                setProductData(prev => ({ ...prev, category: categoryName }));
+                setNewCategory('');
+                setShowNewCategory(false);
+            } catch (err) {
+                setError('Failed to add category: ' + err.message);
+            }
+        };
+
         return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" data-name="product-editor">
                 <div className="bg-white p-8 rounded-lg max-w-xl w-full max-h-[90vh] overflow-y-auto" data-name="product-editor-modal">
@@ -202,10 +217,8 @@ function ProductEditor({ onClose }) {
                                     data-name="category-select"
                                 >
                                     <option value="">Select a category</option>
-                                    {categories.map(category => (
-                                        <option key={category} value={category}>
-                                            {category}
-                                        </option>
+                                    {categories.map((cat) => (
+                                        <option key={cat.id} value={cat.name}>{cat.name}</option>
                                     ))}
                                 </select>
                             )}

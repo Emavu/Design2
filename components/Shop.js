@@ -20,7 +20,7 @@ function Shop({ preview = false, onNavigate }) {
 
         if (loading) {
             return (
-                <section id="shop" className="py-20 bg-white" data-name="shop">
+                <section id="shop" className="py-20 " data-name="shop">
                     <div className="container mx-auto px-4 text-center">
                         <i className="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
                     </div>
@@ -29,7 +29,7 @@ function Shop({ preview = false, onNavigate }) {
         }
 
         return (
-            <section id="shop" className="py-20 bg-white" data-name="shop">
+            <section id="shop" className="py-20 " data-name="shop">
                 <div className="container mx-auto px-4">
                     <h2 className="text-4xl font-bold mb-12 text-center">
                         {preview ? "Featured Products" : "Shop"}
@@ -72,7 +72,7 @@ function Shop({ preview = false, onNavigate }) {
                     {preview && products.length > 0 && (
                         <div className="text-center mt-12">
                             <button 
-                                onClick={() => onNavigate('shop')}
+                                onClick={() => onNavigate && onNavigate('shop')}
                                 className="button"
                                 data-name="view-all-products"
                             >
