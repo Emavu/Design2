@@ -10,7 +10,16 @@ function Shop({ preview = false, onNavigate }) {
         async function loadProducts() {
             try {
                 const fetchedProducts = await getProducts();
-                setProducts(preview ? fetchedProducts.slice(0, 3) : fetchedProducts);
+                // Normalize: flatten objectData if it exists
+                const normalizedProducts = fetchedProducts.map(product =>
+                    product.objectData
+                        ? {
+                            id: product.objectId,
+                            ...product.objectData
+                          }
+                        : product
+                );
+                setProducts(preview ? normalizedProducts.slice(0, 3) : normalizedProducts);
                 setLoading(false);
             } catch (error) {
                 console.error('Error loading products:', error);
@@ -37,24 +46,24 @@ function Shop({ preview = false, onNavigate }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" data-name="product-grid">
                         {products.map(product => (
                             <div 
-                                key={product.objectId} 
+                                key={product.id || product.objectId} 
                                 className="card bg-white cursor-pointer"
                                 onClick={() => onNavigate && onNavigate('shop')}
-                                data-name={`product-${product.objectId}`}
+                                data-name={`product-${product.id || product.objectId}`}
                             >
-                                {product.objectData.imageUrl && (
+                                {product.image && (
                                     <img 
-                                        src={product.objectData.imageUrl} 
-                                        alt={product.objectData.name} 
+                                        src={product.image} 
+                                        alt={product.name} 
                                         className="w-full h-48 object-cover"
-                                        data-name={`product-image-${product.objectId}`}
+                                        data-name={`product-image-${product.id || product.objectId}`}
                                     />
                                 )}
                                 <div className="p-6">
-                                    <h3 className="text-xl font-bold mb-2">{product.objectData.name}</h3>
-                                    <p className="text-gray-600 mb-4">{product.objectData.description}</p>
+                                    <h3 className="text-xl font-bold mb-2">{product.name}</h3>
+                                    <p className="text-gray-600 mb-4">{product.description}</p>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-xl font-bold">${product.objectData.price}</span>
+                                        <span className="text-xl font-bold">${product.price}</span>
                                         <button 
                                             className="button"
                                             onClick={(e) => {

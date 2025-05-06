@@ -2,6 +2,7 @@ function Blog({ preview = false, onNavigate }) {
     try {
         const [posts, setPosts] = React.useState([]);
         const [loading, setLoading] = React.useState(true);
+        const [selectedPost, setSelectedPost] = React.useState(null);
 
         React.useEffect(() => {
             loadBlogPosts();
@@ -9,14 +10,19 @@ function Blog({ preview = false, onNavigate }) {
 
         async function loadBlogPosts() {
             try {
-                const fetchedPosts = await getBlogPosts();
-                setPosts(preview ? fetchedPosts.slice(0, 3) : fetchedPosts);
+                const blogPosts = await window.db.getBlogPosts();
+                setPosts(preview ? blogPosts.slice(0, 3) : blogPosts);
                 setLoading(false);
             } catch (error) {
                 console.error('Error loading blog posts:', error);
                 setLoading(false);
             }
         }
+
+        const handlePostClick = (post) => {
+            console.log('Selected post:', post); // Debug log
+            setSelectedPost(post);
+        };
 
         if (loading) {
             return (
@@ -26,6 +32,13 @@ function Blog({ preview = false, onNavigate }) {
                     </div>
                 </section>
             );
+        }
+
+        if (selectedPost) {
+            console.log('Rendering BlogPostDetail with post:', selectedPost); // Debug log
+            return window.BlogPostDetail ? (
+                <window.BlogPostDetail post={selectedPost} onBack={() => setSelectedPost(null)} />
+            ) : null;
         }
 
         return (
@@ -39,21 +52,21 @@ function Blog({ preview = false, onNavigate }) {
                             <article 
                                 key={post.objectId} 
                                 className="card bg-white cursor-pointer"
-                                onClick={() => onNavigate && onNavigate('blog')}
+                                onClick={() => handlePostClick(post)}
                                 data-name={`blog-post-${post.objectId}`}
                             >
-                                {post.objectData.imageUrl && (
+                                {post.imageUrl && (
                                     <img 
-                                        src={post.objectData.imageUrl} 
-                                        alt={post.objectData.title} 
+                                        src={post.imageUrl} 
+                                        alt={post.title} 
                                         className="w-full h-48 object-cover"
                                         data-name={`blog-image-${post.objectId}`}
                                     />
                                 )}
                                 <div className="p-6">
-                                    <h3 className="text-xl font-bold mb-2">{post.objectData.title}</h3>
+                                    <h3 className="text-xl font-bold mb-2">{post.title}</h3>
                                     <p className="text-gray-600 mb-4">
-                                        {post.objectData.content.substring(0, 150)}...
+                                        {post.content.substring(0, 150)}...
                                     </p>
                                     <div className="text-sm text-gray-500">
                                         {new Date(post.createdAt).toLocaleDateString()}

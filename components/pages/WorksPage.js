@@ -2,6 +2,7 @@ function WorksPage() {
     const [works, setWorks] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState('');
+    const [selectedWork, setSelectedWork] = React.useState(null);
 
     React.useEffect(() => {
         loadWorks();
@@ -12,7 +13,19 @@ function WorksPage() {
         setError('');
         try {
             const workItems = await window.db.getWorks();
-            setWorks(workItems);
+            console.log('Raw work items:', workItems); // Debug log
+            
+            // Normalize: flatten objectData if it exists
+            const normalizedWorks = workItems.map(work =>
+                work.objectData
+                    ? {
+                        id: work.objectId,
+                        ...work.objectData
+                      }
+                    : work
+            );
+            console.log('Normalized works:', normalizedWorks); // Debug log
+            setWorks(normalizedWorks);
         } catch (error) {
             setError('Error loading works: ' + error.message);
             console.error('Error loading works:', error);
@@ -20,6 +33,18 @@ function WorksPage() {
             setLoading(false);
         }
     };
+
+    const handleWorkClick = (work) => {
+        console.log('Selected work:', work); // Debug log
+        setSelectedWork(work);
+    };
+
+    if (selectedWork) {
+        console.log('Rendering WorksPostDetail with work:', selectedWork); // Debug log
+        return window.WorksPostDetail ? (
+            <window.WorksPostDetail work={selectedWork} onBack={() => setSelectedWork(null)} />
+        ) : null;
+    }
 
     if (loading) {
         return (
@@ -44,7 +69,11 @@ function WorksPage() {
             <h1 className="text-4xl font-bold mb-8">Works</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {works.map(work => (
-                    <div key={work.id} className="border rounded-lg overflow-hidden shadow-lg">
+                    <div 
+                        key={work.id || work.objectId} 
+                        className="border rounded-lg overflow-hidden shadow-lg cursor-pointer" 
+                        onClick={() => handleWorkClick(work)}
+                    >
                         {work.image && (
                             <img
                                 src={work.image}
@@ -62,7 +91,7 @@ function WorksPage() {
                             )}
                             <div className="flex justify-between items-center mt-4">
                                 <span className="text-sm text-gray-500">
-                                    {new Date(work.createdAt?.toDate()).toLocaleDateString()}
+                                    {work.createdAt ? new Date(work.createdAt.toDate()).toLocaleDateString() : ''}
                                 </span>
                                 {work.link && (
                                     <a

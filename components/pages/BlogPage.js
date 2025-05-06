@@ -2,6 +2,7 @@ function BlogPage() {
     const [posts, setPosts] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState('');
+    const [selectedPost, setSelectedPost] = React.useState(null);
 
     React.useEffect(() => {
         loadPosts();
@@ -15,17 +16,11 @@ function BlogPage() {
             setPosts(blogPosts);
             // After fetching posts, log each imageUrl
             blogPosts.forEach(post => {
-                if (post.imageUrl) {
-                    console.log('BlogPost imageUrl:', post.imageUrl);
-                } else if (post.objectData && post.objectData.imageUrl) {
-                    console.log('BlogPost objectData.imageUrl:', post.objectData.imageUrl);
-                } else {
-                    console.log('BlogPost has no imageUrl:', post);
-                }
+                console.log('Post imageUrl:', post.imageUrl);
             });
         } catch (error) {
-            setError('Error loading blog posts: ' + error.message);
             console.error('Error loading blog posts:', error);
+            setError('Failed to load blog posts');
         } finally {
             setLoading(false);
         }
@@ -49,12 +44,18 @@ function BlogPage() {
         );
     }
 
+    if (selectedPost) {
+        return window.BlogPostDetail ? (
+            <window.BlogPostDetail post={selectedPost} onBack={() => setSelectedPost(null)} />
+        ) : null;
+    }
+
     return (
         <div className="container mx-auto px-4 py-8">
             <h1 className="text-4xl font-bold mb-8">Blog</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {posts.map(post => (
-                    <div key={post.id} className="border rounded-lg overflow-hidden shadow-lg">
+                    <div key={post.id} className="border rounded-lg overflow-hidden shadow-lg cursor-pointer" onClick={() => setSelectedPost(post)}>
                         {(post.imageUrl || post.image) && (
                             <img
                                 src={post.imageUrl || post.image}
@@ -70,8 +71,9 @@ function BlogPage() {
                                     {new Date(post.createdAt?.toDate()).toLocaleDateString()}
                                 </span>
                                 <a
-                                    href={`/blog/${post.id}`}
+                                    href="#"
                                     className="text-black hover:text-gray-600"
+                                    onClick={e => { e.preventDefault(); setSelectedPost(post); }}
                                 >
                                     Read More
                                 </a>

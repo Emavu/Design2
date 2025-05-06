@@ -110,13 +110,13 @@ function Navigation({ onNavigate, currentPage, cartItems = [], onCartClick }) {
                                     Shop
                                 </a>
                             <a 
-                                onClick={() => handleNavigation('home')} 
+                                onClick={() => handleNavigation('#about')} 
                                 className="nav-link cursor-pointer text-black drop-shadow-lg text-lg"
                             >
                                 About
                             </a>
                             <a 
-                                onClick={() => handleNavigation('home')} 
+                                onClick={() => handleNavigation('#home')} 
                                 className="nav-link cursor-pointer text-black drop-shadow-lg text-lg"
                             >
                                 Contact

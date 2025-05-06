@@ -1,6 +1,6 @@
-function WorkEditor({ onClose }) {
+function WorkEditor({ work, onClose }) {
     try {
-        const [work, setWork] = React.useState({
+        const [workData, setWorkData] = React.useState({
             title: '',
             description: '',
             imageUrl: '',
@@ -21,51 +21,68 @@ function WorkEditor({ onClose }) {
         const [loading, setLoading] = React.useState(false);
         const [error, setError] = React.useState(null);
 
+        React.useEffect(() => {
+            if (work) {
+                setWorkData({
+                    title: work.title || '',
+                    description: work.description || '',
+                    imageUrl: work.imageUrl || '',
+                    modelUrl: work.modelUrl || '',
+                    gallery: work.gallery || ['', '', ''],
+                    details: work.details || '',
+                    category: work.category || '',
+                    newCategory: ''
+                });
+            }
+        }, [work]);
+
         const handleSubmit = async (e) => {
             e.preventDefault();
             setLoading(true);
             setError(null);
 
             try {
-                if (!work.title || !work.description || !work.details) {
+                if (!workData.title || !workData.description || !workData.details) {
                     throw new Error('Please fill in all required fields');
                 }
 
-                const category = showNewCategory ? work.newCategory : work.category;
+                const category = showNewCategory ? workData.newCategory : workData.category;
                 if (!category) {
                     throw new Error('Please select or create a category');
                 }
 
-                if (showNewCategory && !categories.includes(work.newCategory)) {
-                    setCategories([...categories, work.newCategory]);
+                if (showNewCategory && !categories.includes(workData.newCategory)) {
+                    setCategories([...categories, workData.newCategory]);
                 }
 
                 // Filter out empty gallery URLs
-                const gallery = work.gallery.filter(url => url.trim() !== '');
+                const gallery = workData.gallery.filter(url => url.trim() !== '');
 
-                await createWork(
-                    work.title,
-                    work.description,
-                    work.imageUrl,
-                    work.modelUrl,
-                    gallery,
-                    work.details,
-                    category
-                );
+                if (work) {
+                    await window.db.updateWork(work.id, {
+                        title: workData.title,
+                        description: workData.description,
+                        imageUrl: workData.imageUrl,
+                        modelUrl: workData.modelUrl,
+                        gallery,
+                        details: workData.details,
+                        category
+                    });
+                } else {
+                    await createWork(
+                        workData.title,
+                        workData.description,
+                        workData.imageUrl,
+                        workData.modelUrl,
+                        gallery,
+                        workData.details,
+                        category
+                    );
+                }
 
-                setWork({
-                    title: '',
-                    description: '',
-                    imageUrl: '',
-                    modelUrl: '',
-                    gallery: ['', '', ''],
-                    details: '',
-                    category: '',
-                    newCategory: ''
-                });
                 onClose();
             } catch (err) {
-                console.error('Error creating work:', err);
+                console.error('Error saving work:', err);
                 setError(err.message);
             } finally {
                 setLoading(false);
@@ -74,22 +91,33 @@ function WorkEditor({ onClose }) {
 
         const handleChange = (e) => {
             const { name, value } = e.target;
-            setWork(prev => ({
+            setWorkData(prev => ({
                 ...prev,
                 [name]: value
             }));
         };
 
         const handleGalleryChange = (index, value) => {
-            setWork(prev => ({
+            setWorkData(prev => ({
                 ...prev,
                 gallery: prev.gallery.map((url, i) => i === index ? value : url)
             }));
         };
 
+        const handleImageUpload = (imageUrl) => {
+            setWorkData(prev => ({ ...prev, imageUrl }));
+        };
+
+        const handleGalleryUpload = (index, imageUrl) => {
+            setWorkData(prev => ({
+                ...prev,
+                gallery: prev.gallery.map((url, i) => i === index ? imageUrl : url)
+            }));
+        };
+
         const toggleNewCategory = () => {
             setShowNewCategory(!showNewCategory);
-            setWork(prev => ({
+            setWorkData(prev => ({
                 ...prev,
                 category: '',
                 newCategory: ''
@@ -100,7 +128,7 @@ function WorkEditor({ onClose }) {
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" data-name="work-editor">
                 <div className="bg-white p-8 rounded-lg max-w-xl w-full max-h-[90vh] overflow-y-auto" data-name="work-editor-modal">
                     <div className="flex justify-between items-center mb-6" data-name="work-editor-header">
-                        <h2 className="text-2xl font-bold">Add New Work</h2>
+                        <h2 className="text-2xl font-bold">{work ? 'Edit Work' : 'Add New Work'}</h2>
                         <button 
                             onClick={onClose}
                             className="text-gray-500 hover:text-gray-700"
@@ -122,7 +150,7 @@ function WorkEditor({ onClose }) {
                             <input
                                 type="text"
                                 name="title"
-                                value={work.title}
+                                value={workData.title}
                                 onChange={handleChange}
                                 className="w-full p-3 border border-gray-300 rounded"
                                 required
@@ -134,7 +162,7 @@ function WorkEditor({ onClose }) {
                             <label className="block text-sm font-medium mb-2">Description *</label>
                             <textarea
                                 name="description"
-                                value={work.description}
+                                value={workData.description}
                                 onChange={handleChange}
                                 className="w-full p-3 border border-gray-300 rounded h-32"
                                 required
@@ -143,42 +171,42 @@ function WorkEditor({ onClose }) {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium mb-2">Main Image URL *</label>
-                            <input
-                                type="url"
-                                name="imageUrl"
-                                value={work.imageUrl}
-                                onChange={handleChange}
-                                className="w-full p-3 border border-gray-300 rounded"
-                                required
-                                data-name="work-image-input"
-                            />
+                            <label className="block text-sm font-medium mb-2">Main Image *</label>
+                            <DragDropUploader onUploadComplete={handleImageUpload} type="image" />
+                            {workData.imageUrl && (
+                                <div className="mt-2">
+                                    <img 
+                                        src={workData.imageUrl} 
+                                        alt="Preview" 
+                                        className="max-h-40 rounded-lg"
+                                    />
+                                </div>
+                            )}
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium mb-2">3D Model URL (GLB format)</label>
-                            <input
-                                type="url"
-                                name="modelUrl"
-                                value={work.modelUrl}
-                                onChange={handleChange}
-                                className="w-full p-3 border border-gray-300 rounded"
-                                data-name="work-model-input"
-                            />
+                            <label className="block text-sm font-medium mb-2">3D Model (GLB format)</label>
+                            <DragDropUploader onUploadComplete={(url) => setWorkData(prev => ({ ...prev, modelUrl: url }))} type="model" />
                         </div>
 
                         <div>
                             <label className="block text-sm font-medium mb-2">Gallery Images</label>
-                            {work.gallery.map((url, index) => (
-                                <input
-                                    key={index}
-                                    type="url"
-                                    value={url}
-                                    onChange={(e) => handleGalleryChange(index, e.target.value)}
-                                    placeholder={`Gallery image URL ${index + 1}`}
-                                    className="w-full p-3 border border-gray-300 rounded mb-2"
-                                    data-name={`work-gallery-input-${index}`}
-                                />
+                            {workData.gallery.map((url, index) => (
+                                <div key={index} className="mb-4">
+                                    <DragDropUploader 
+                                        onUploadComplete={(imageUrl) => handleGalleryUpload(index, imageUrl)} 
+                                        type="image"
+                                    />
+                                    {url && (
+                                        <div className="mt-2">
+                                            <img 
+                                                src={url} 
+                                                alt={`Gallery ${index + 1}`} 
+                                                className="max-h-40 rounded-lg"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                             ))}
                         </div>
 
@@ -186,7 +214,7 @@ function WorkEditor({ onClose }) {
                             <label className="block text-sm font-medium mb-2">Detailed Description *</label>
                             <textarea
                                 name="details"
-                                value={work.details}
+                                value={workData.details}
                                 onChange={handleChange}
                                 className="w-full p-3 border border-gray-300 rounded h-48"
                                 required
@@ -211,7 +239,7 @@ function WorkEditor({ onClose }) {
                                 <input
                                     type="text"
                                     name="newCategory"
-                                    value={work.newCategory}
+                                    value={workData.newCategory}
                                     onChange={handleChange}
                                     placeholder="Enter new category name"
                                     className="w-full p-3 border border-gray-300 rounded"
@@ -221,7 +249,7 @@ function WorkEditor({ onClose }) {
                             ) : (
                                 <select
                                     name="category"
-                                    value={work.category}
+                                    value={workData.category}
                                     onChange={handleChange}
                                     className="w-full p-3 border border-gray-300 rounded"
                                     required
@@ -237,10 +265,10 @@ function WorkEditor({ onClose }) {
                             )}
                         </div>
 
-                        {work.modelUrl && (
+                        {workData.modelUrl && (
                             <div className="mt-4" data-name="work-model-preview">
                                 <label className="block text-sm font-medium mb-2">Model Preview</label>
-                                <ModelViewer modelUrl={work.modelUrl} />
+                                <ModelViewer modelUrl={workData.modelUrl} />
                             </div>
                         )}
 
@@ -250,7 +278,7 @@ function WorkEditor({ onClose }) {
                             disabled={loading}
                             data-name="work-submit-button"
                         >
-                            {loading ? 'Creating...' : 'Create Work'}
+                            {loading ? 'Saving...' : (work ? 'Update Work' : 'Create Work')}
                         </button>
                     </form>
                 </div>

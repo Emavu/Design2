@@ -1,12 +1,24 @@
 function App() {
     try {
         const [currentPage, setCurrentPage] = React.useState('home');
+        const [selectedItem, setSelectedItem] = React.useState(null);
         const [cartItems, setCartItems] = React.useState([]);
         const [isCartOpen, setIsCartOpen] = React.useState(false);
 
         const handleNavigate = (page) => {
-            setCurrentPage(page);
-            window.location.hash = `#${page}`;
+            if (typeof page === 'string') {
+                setCurrentPage(page);
+                setSelectedItem(null);
+                window.location.hash = `#${page}`;
+            } else if (page.type === 'blog-post') {
+                setCurrentPage('blog-post');
+                setSelectedItem(page.post);
+                window.location.hash = `#blog-post-${page.post.objectId}`;
+            } else if (page.type === 'work') {
+                setCurrentPage('work');
+                setSelectedItem(page.work);
+                window.location.hash = `#work-${page.work.id || page.work.objectId}`;
+            }
         };
 
         const renderPage = () => {
@@ -20,12 +32,30 @@ function App() {
                             </div>
                         </div>
                     );
+                case 'blog-post':
+                    return (
+                        <div className="min-h-screen bg-white" data-name="blog-post-container">
+                            <Navigation onNavigate={handleNavigate} currentPage="blog" />
+                            <div className="pt-20">
+                                <window.BlogPostDetail post={selectedItem} onBack={() => handleNavigate('blog')} />
+                            </div>
+                        </div>
+                    );
                 case 'works':
                     return (
                         <div className="min-h-screen bg-white" data-name="works-container">
                             <Navigation onNavigate={handleNavigate} currentPage="works" />
                             <div className="pt-20">
                                 <WorksPage onNavigate={handleNavigate} />
+                            </div>
+                        </div>
+                    );
+                case 'work':
+                    return (
+                        <div className="min-h-screen bg-white" data-name="work-container">
+                            <Navigation onNavigate={handleNavigate} currentPage="works" />
+                            <div className="pt-20">
+                                <window.WorksPostDetail work={selectedItem} onBack={() => handleNavigate('works')} />
                             </div>
                         </div>
                     );

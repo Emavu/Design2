@@ -2,6 +2,7 @@ function Works({ preview = false, onNavigate }) {
     try {
         const [works, setWorks] = React.useState([]);
         const [loading, setLoading] = React.useState(true);
+        const [selectedWork, setSelectedWork] = React.useState(null);
 
         React.useEffect(() => {
             loadWorks();
@@ -10,13 +11,27 @@ function Works({ preview = false, onNavigate }) {
         async function loadWorks() {
             try {
                 const fetchedWorks = await getWorks();
-                setWorks(preview ? fetchedWorks.slice(0, 3) : fetchedWorks);
+                // Normalize: flatten objectData if it exists
+                const normalizedWorks = fetchedWorks.map(work =>
+                    work.objectData
+                        ? {
+                            id: work.objectId,
+                            ...work.objectData
+                          }
+                        : work
+                );
+                setWorks(preview ? normalizedWorks.slice(0, 3) : normalizedWorks);
                 setLoading(false);
             } catch (error) {
                 console.error('Error loading works:', error);
                 setLoading(false);
             }
         }
+
+        const handleWorkClick = (work) => {
+            console.log('Selected work:', work); // Debug log
+            setSelectedWork(work);
+        };
 
         if (loading) {
             return (
@@ -28,6 +43,13 @@ function Works({ preview = false, onNavigate }) {
             );
         }
 
+        if (selectedWork) {
+            console.log('Rendering WorksPostDetail with work:', selectedWork); // Debug log
+            return window.WorksPostDetail ? (
+                <window.WorksPostDetail work={selectedWork} onBack={() => setSelectedWork(null)} />
+            ) : null;
+        }
+
         return (
             <section id="works" className="py-20 bg-gray-50" data-name="works">
                 <div className="container mx-auto px-4">
@@ -37,22 +59,24 @@ function Works({ preview = false, onNavigate }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" data-name="works-grid">
                         {works.map(work => (
                             <div 
-                                key={work.objectId} 
+                                key={work.id || work.objectId} 
                                 className="card bg-white cursor-pointer transform hover:scale-105 transition-all duration-300"
-                                onClick={() => onNavigate && onNavigate('works', work)}
-                                data-name={`work-item-${work.objectId}`}
+                                onClick={() => handleWorkClick(work)}
+                                data-name={`work-item-${work.id || work.objectId}`}
                             >
-                                <img 
-                                    src={work.objectData.imageUrl} 
-                                    alt={work.objectData.title} 
-                                    className="w-full h-48 object-cover mb-4"
-                                    data-name={`work-image-${work.objectId}`}
-                                />
+                                {work.image && (
+                                    <img 
+                                        src={work.image} 
+                                        alt={work.title} 
+                                        className="w-full h-48 object-cover mb-4"
+                                        data-name={`work-image-${work.id || work.objectId}`}
+                                    />
+                                )}
                                 <div className="p-6">
-                                    <h3 className="text-xl font-bold mb-2">{work.objectData.title}</h3>
-                                    <p className="text-gray-600">{work.objectData.description}</p>
+                                    <h3 className="text-xl font-bold mb-2">{work.title}</h3>
+                                    <p className="text-gray-600">{work.description}</p>
                                     <div className="mt-4">
-                                        <span className="text-sm text-gray-500">{work.objectData.category}</span>
+                                        <span className="text-sm text-gray-500">{work.category}</span>
                                     </div>
                                 </div>
                             </div>

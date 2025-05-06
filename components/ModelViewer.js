@@ -168,3 +168,6 @@ function ModelViewer({ modelUrl }) {
         return null;
     }
 }
+
+// Make ModelViewer component available globally
+window.ModelViewer = ModelViewer;
