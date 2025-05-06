@@ -81,20 +81,23 @@ function ShoppingCart({ isOpen, onClose, items, onUpdateQuantity, onRemoveItem }
                             <span className="font-bold">Total:</span>
                             <span className="font-bold text-xl">${total.toFixed(2)}</span>
                         </div>
-                        <button 
-                            onClick={() => {
-                                // Handle checkout
-                                console.log('Proceeding to checkout...');
+                        <button
+                            className="snipcart-checkout w-full py-4 bg-black text-white rounded-lg hover:bg-gray-800 text-lg font-bold"
+                            onClick={e => {
+                                e.preventDefault();
+                                syncCartWithSnipcart(items);
+                                if (window.Snipcart) {
+                                    window.Snipcart.api.modal.show();
+                                }
                             }}
-                            className="w-full bg-black text-white py-2 rounded hover:bg-gray-800 transition-colors"
-                            disabled={items.length === 0}
-                            data-name="checkout-button"
                         >
                             Proceed to Checkout
                         </button>
                     </div>
                 </div>
+                <div hidden id="snipcart"></div>
             </div>
+            
         );
     } catch (error) {
         console.error('ShoppingCart component error:', error);
@@ -102,3 +105,25 @@ function ShoppingCart({ isOpen, onClose, items, onUpdateQuantity, onRemoveItem }
         return null;
     }
 }
+function syncCartWithSnipcart(items) {
+    if (!window.Snipcart) {
+        alert("Snipcart is not loaded yet!");
+        return;
+    }
+    // Clear Snipcart cart first (optional, to avoid duplicates)
+    window.Snipcart.api.cart.empty();
+
+    // Add each item
+    items.forEach(item => {
+        window.Snipcart.api.items.add({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            url: window.location.href,
+            quantity: item.quantity,
+            image: item.imageUrl,
+            description: item.description,
+        });
+    });
+}
+

@@ -48,23 +48,24 @@ function ShopPage({ onNavigate, cartItems, setCartItems, isCartOpen, setIsCartOp
         return matchesSearch && matchesCategory;
     });
 
-    const addToCart = (product) => {
+    const addToCart = (product, quantity = 1) => {
         const existingItem = cartItems.find(item => item.id === product.id);
         if (existingItem) {
             setCartItems(cartItems.map(item =>
                 item.id === product.id
-                    ? { ...item, quantity: item.quantity + 1 }
+                    ? { ...item, quantity }
                     : item
             ));
         } else {
-            setCartItems([...cartItems, { ...product, quantity: 1 }]);
+            setCartItems([...cartItems, { ...product, quantity }]);
         }
         setIsCartOpen(true);
     };
 
     const handleProductClick = (product) => {
         setSelectedProduct(product);
-        setQuantity(1);
+        const cartItem = cartItems.find(item => item.id === product.id);
+        setQuantity(cartItem ? cartItem.quantity : 1);
         setSelectedColor('default');
     };
 
@@ -194,23 +195,35 @@ function ShopPage({ onNavigate, cartItems, setCartItems, isCartOpen, setIsCartOp
                             <i className="fas fa-times"></i>
                         </button>
 
+                        {/* Guard: If required product data is missing, show fallback */}
+                        {!(selectedProduct.gallery && Array.isArray(selectedProduct.gallery) && selectedProduct.gallery.length > 0 && selectedProduct.specs && selectedProduct.name && selectedProduct.price) ? (
+                            <div className="flex items-center justify-center h-96 text-gray-500 text-xl">Product details are unavailable.</div>
+                        ) : (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 p-8">
                             <div className="space-y-8">
                                 <div className="h-[400px] bg-gray-100 rounded-lg overflow-hidden" data-name="product-gallery">
-                                    <ModelViewer modelUrl={selectedProduct.modelUrl} />
+                                    {selectedProduct.modelUrl ? (
+                                        <ModelViewer modelUrl={selectedProduct.modelUrl} />
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-gray-400">No 3D Model</div>
+                                    )}
                                 </div>
                                 
                                 <div className="grid grid-cols-4 gap-4">
-                                    {selectedProduct.gallery.map((image, index) => (
+                                    {selectedProduct.gallery && selectedProduct.gallery.map((image, index) => (
                                         <div 
                                             key={index}
                                             className="aspect-w-1 aspect-h-1 rounded-lg overflow-hidden"
                                         >
-                                            <img 
-                                                src={image}
-                                                alt={`Product view ${index + 1}`}
-                                                className="w-full h-full object-cover"
-                                            />
+                                            {image ? (
+                                                <img 
+                                                    src={image}
+                                                    alt={`Product view ${index + 1}`}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-400">No Image</div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -294,7 +307,7 @@ function ShopPage({ onNavigate, cartItems, setCartItems, isCartOpen, setIsCartOp
                                 <button 
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        addToCart(selectedProduct);
+                                        addToCart(selectedProduct, quantity);
                                     }}
                                     className="w-full py-4 bg-black text-white rounded-lg hover:bg-gray-800 transform hover:scale-105 transition-all text-lg font-bold"
                                 >
@@ -302,6 +315,7 @@ function ShopPage({ onNavigate, cartItems, setCartItems, isCartOpen, setIsCartOp
                                 </button>
                             </div>
                         </div>
+                        )}
                     </div>
                 </div>
             )}
