@@ -2,6 +2,7 @@ function Footer() {
     try {
         return (
             <footer className="bg-white border-t border-gray-200 py-12" data-name="footer">
+             <h1 className="font-bold mb-4">Domantas Garmus design</h3>
                 <div className="container mx-auto px-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         
