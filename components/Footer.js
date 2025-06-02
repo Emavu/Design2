@@ -19,7 +19,7 @@ function Footer() {
                             <ul className="space-y-2">
                                 <li className="text-gray-600">Kaunas, Lithuania</li>
                                 <li className="text-gray-600">+(2) 871 382 023</li>
-                                <li className="text-gray-600">ryanwhite@yahoo.com</li>
+                                <li className="text-gray-600">domgarm@gmail.com</li>
                             </ul>
                         </div>
                         <div data-name="footer-social">
