@@ -1,0 +1,40 @@
+{
+  "entities": {
+    "PortfolioSettings": {
+      "title": "Portfolio Settings",
+      "description": "Global settings for the portfolio site",
+      "type": "object",
+      "properties": {
+        "ownerName": { "type": "string", "description": "The name of the portfolio owner" }
+      },
+      "required": ["ownerName"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A single project in the portfolio",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "stlUrl": { "type": "string" },
+        "year": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "category", "imageUrl"]
+    }
+  },
+  "firestore": {
+    "/settings/portfolio": {
+      "schema": "PortfolioSettings",
+      "description": "The global settings document"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "The collection of portfolio projects"
+    }
+  }
+}
