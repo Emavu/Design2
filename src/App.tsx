@@ -1,9 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo, useLayoutEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useSpring } from 'motion/react';
-import { Plus, Trash2, Edit2, X, Image as ImageIcon, ExternalLink, Calendar, MapPin, Box, LogOut } from 'lucide-react';
-import { Canvas, useLoader } from '@react-three/fiber';
-import { OrbitControls, Stage, Center, View, Preload } from '@react-three/drei';
-import { GLTFLoader, FBXLoader, STLLoader } from 'three-stdlib';
+import { Plus, Trash2, Edit2, X, Image as ImageIcon, ExternalLink, Calendar, MapPin, LogOut } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { 
   collection, 
@@ -44,50 +41,6 @@ const getRandomSize = (id: string) => {
     const s = 150 + (hash % 30);
     return { width: s, height: s };
   }
-};
-
-// --- Multi-Format Model Viewer ---
-const Model = ({ url }: { url: string }) => {
-  const isStl = url.toLowerCase().endsWith('.stl');
-  const isGltf = url.toLowerCase().endsWith('.gltf') || url.toLowerCase().endsWith('.glb');
-  const isFbx = url.toLowerCase().endsWith('.fbx');
-
-  if (isStl) {
-    const geom = useLoader(STLLoader, url);
-    return <mesh geometry={geom}><meshStandardMaterial color="#888" roughness={0.3} metalness={0.8} /></mesh>;
-  }
-
-  if (isGltf) {
-    const { scene } = useLoader(GLTFLoader, url);
-    return <primitive object={scene} />;
-  }
-
-  if (isFbx) {
-    const fbx = useLoader(FBXLoader, url);
-    return <primitive object={fbx} />;
-  }
-
-  return null;
-};
-
-const StlViewer = ({ url, isThumbnail = false }: { url: string, isThumbnail?: boolean }) => {
-  return (
-    <div className={`w-full h-full bg-zinc-50 overflow-hidden relative border border-black/5 ${isThumbnail ? 'pointer-events-none' : ''}`}>
-      <Canvas shadows={!isThumbnail} gl={{ antialias: true }} camera={{ position: [0, 0, 10], fov: 50 }}>
-        <Suspense fallback={null}>
-          <Stage environment="city" intensity={0.5} shadows={isThumbnail ? false : "contact"}>
-            <Center>
-              <Model url={url} />
-            </Center>
-          </Stage>
-        </Suspense>
-        {!isThumbnail && <OrbitControls makeDefault />}
-      </Canvas>
-      <div className="absolute bottom-4 left-4 pointer-events-none">
-        <span className="text-[10px] font-mono uppercase tracking-widest opacity-30">{isThumbnail ? '3D' : 'Interactive 3D View'}</span>
-      </div>
-    </div>
-  );
 };
 
 // --- Custom Hook for Firebase Data ---
@@ -1086,17 +1039,13 @@ const ThreeDCarousel = ({ items, onSelectItem }: { items: PortfolioItem[], onSel
                       top: `-${height / 2}px`,
                     }}
                   >
-                    <div className={`w-full h-full shadow-2xl overflow-hidden group-hover:scale-105 transition-transform duration-500 flex flex-col relative ${item.stlUrl ? '' : 'bg-zinc-50 border border-black/5'}`}>
-                      {item.stlUrl ? (
-                        <StlViewer url={item.stlUrl} isThumbnail />
-                      ) : (
-                        <img 
-                          src={item.imageUrl} 
-                          alt={item.title} 
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                      )}
+                    <div className="w-full h-full shadow-2xl overflow-hidden group-hover:scale-105 transition-transform duration-500 flex flex-col relative bg-zinc-50 border border-black/5">
+                      <img 
+                        src={item.imageUrl} 
+                        alt={item.title} 
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
                       
                       <div className="absolute inset-0 z-20 pointer-events-none bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-5">
                         <div className="space-y-0.5">
@@ -1304,10 +1253,7 @@ const ProjectCard = ({ item, onClose, isAdmin }: { item: PortfolioItem, onClose:
               mass: 1.2
             }}
           >
-            {item.stlUrl ? (
-              <StlViewer url={item.stlUrl} />
-            ) : (
-              (item.images && item.images.length > 0) || item.imageUrl ? (
+            {(item.images && item.images.length > 0) || item.imageUrl ? (
                 <div className="w-full h-full shadow-2xl relative">
                   <LoopingGallery 
                     images={item.images && item.images.length > 0 ? item.images : [item.imageUrl].filter(Boolean) as string[]} 
@@ -1441,7 +1387,6 @@ const ProjectCard = ({ item, onClose, isAdmin }: { item: PortfolioItem, onClose:
                    ) : (
                      <p className="text-[10px] font-mono uppercase tracking-[0.3em] font-bold text-black/30">{item.label || "Case Study 2026"}</p>
                    )}
-                   {item.stlUrl && <span className="bg-black text-white text-[8px] px-2 py-0.5 uppercase tracking-widest font-mono">3D Content</span>}
                 </div>
                 {isAdmin ? (
                   <div className="group/title relative z-[70]">
@@ -1543,25 +1488,6 @@ const ProjectCard = ({ item, onClose, isAdmin }: { item: PortfolioItem, onClose:
                 <p>{item.description || "The conceptualization of modern industrial objects requires a delicate balance between utility and aesthetic purity. This project explores the intersection of raw materiality and high-performance engineering."}</p>
               )}
               
-              {isAdmin && (
-                <div className="space-y-3 pt-6 border-t border-black/5">
-                   <h4 className="text-[9px] uppercase font-bold tracking-widest opacity-40">Advanced Specs</h4>
-                   <div className="space-y-2">
-                     <label className="flex items-center gap-2 text-[10px] group/url">
-                       <Box size={10} className="opacity-40 group-hover/url:opacity-100" />
-                       <input 
-                         type="text"
-                         placeholder="STL/GLB URL"
-                         defaultValue={item.stlUrl || ""}
-                         onBlur={(e) => updateField('stlUrl', e.target.value)}
-                         className="flex-1 bg-transparent border-none outline-none font-mono text-[9px] opacity-40 hover:opacity-100 focus:opacity-100 text-black"
-                       />
-                     </label>
-                   </div>
-                </div>
-              )}
-
-              {item.stlUrl && <p className="opacity-40 text-xs italic">Use your mouse to orbit and scroll to zoom in the 3D viewer above.</p>}
               <div className="w-20 h-[1px] bg-black/10" />
             </div>
           </div>
@@ -1698,31 +1624,25 @@ const AdminPanel = ({ data, onClose }: { data: PortfolioData, onClose: () => voi
 
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleFileUpload = async (file: File, type: 'image' | 'stl') => {
+  const handleFileUpload = async (file: File) => {
     if (!editingItem) return;
     
     setIsUploading(true);
     try {
       const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      const fileRef = sRef(storage, `portfolio/${editingItem.id}/${type}_${uniqueSuffix}_${file.name}`);
+      const fileRef = sRef(storage, `portfolio/${editingItem.id}/image_${uniqueSuffix}_${file.name}`);
       const snapshot = await uploadBytes(fileRef, file);
       const url = await getDownloadURL(snapshot.ref);
 
-      if (type === 'image') {
-        const currentImages = editingItem.images || [];
-        const updatedImages = [...currentImages, url];
-        const updated = { 
-          ...editingItem, 
-          imageUrl: currentImages.length === 0 ? url : editingItem.imageUrl,
-          images: updatedImages 
-        };
-        await updateItem(updated);
-        setEditingItem(updated);
-      } else {
-        const updated = { ...editingItem, stlUrl: url };
-        await updateItem(updated);
-        setEditingItem(updated);
-      }
+      const currentImages = editingItem.images || [];
+      const updatedImages = [...currentImages, url];
+      const updated = { 
+        ...editingItem, 
+        imageUrl: currentImages.length === 0 ? url : editingItem.imageUrl,
+        images: updatedImages 
+      };
+      await updateItem(updated);
+      setEditingItem(updated);
     } catch (err: any) {
       console.error("Upload failed", err);
       const msg = err?.message || "Unknown error";
@@ -2070,11 +1990,7 @@ const AdminPanel = ({ data, onClose }: { data: PortfolioData, onClose: () => voi
                     <DropZone 
                       label="Drop Image" 
                       accept="image/*" 
-                      onFileSelected={(f) => handleFileUpload(f, 'image')} />
-                    <DropZone 
-                      label="Drop Model" 
-                      accept=".stl,.glb,.gltf,.fbx" 
-                      onFileSelected={(f) => handleFileUpload(f, 'stl')} />
+                      onFileSelected={(f) => handleFileUpload(f)} />
                   </>
                 )}
               </div>
@@ -2137,13 +2053,6 @@ const AdminPanel = ({ data, onClose }: { data: PortfolioData, onClose: () => voi
                       value={editingItem.imageUrl}
                       onPointerDown={(e) => e.stopPropagation()}
                       onChange={(e) => updateItem({ ...editingItem, imageUrl: e.target.value })}
-                    />
-                    <input 
-                      className="w-full border border-zinc-100 p-2 outline-none focus:border-black text-[9px] font-mono relative z-[170] pointer-events-auto"
-                      placeholder="Model URL (stl, glb, fbx)"
-                      value={editingItem.stlUrl || ''}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onChange={(e) => updateItem({ ...editingItem, stlUrl: e.target.value })}
                     />
                   </div>
                 </div>

@@ -4,7 +4,6 @@ export interface PortfolioItem {
   category: string;
   imageUrl: string;
   images?: string[]; // Multiple images for gallery
-  stlUrl?: string; // URL for 3D model
   description?: string;
   year?: string;
   label?: string; // e.g. "Case Study 2026"
