@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useLayoutEffect, Suspense } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useSpring } from 'motion/react';
 import { Plus, Trash2, Edit2, X, Image as ImageIcon, ExternalLink, Calendar, MapPin, Box, LogOut } from 'lucide-react';
 import { Canvas, useLoader } from '@react-three/fiber';
@@ -26,7 +26,12 @@ import { auth, db, storage, signInWithGoogle, logout } from './lib/firebase';
 import { PortfolioData, PortfolioItem } from './types';
 import { DEFAULT_PORTFOLIO_DATA } from './constants';
 
-// --- Global helper to generate stable random size with varied formats ---
+// types.ts extension for global flags if needed, but we'll use a type cast
+declare global {
+  interface Window {
+    swooshPlaying: boolean;
+  }
+}
 const getRandomSize = (id: string) => {
   const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const type = hash % 3; // 0: Portrait, 1: Landscape, 2: Square
@@ -95,10 +100,28 @@ function usePortfolioData() {
     const settingsDoc = doc(db, 'settings', 'portfolio');
     const unsubSettings = onSnapshot(settingsDoc, (snap) => {
       if (snap.exists()) {
-        setData(prev => ({ ...prev, ownerName: snap.data().ownerName }));
+        const s = snap.data();
+        setData(prev => ({ 
+          ...prev, 
+          ownerName: s.ownerName,
+          workExperience: s.workExperience,
+          education: s.education,
+          modeling: s.modeling,
+          softSkill: s.softSkill,
+          visualization: s.visualization,
+          prototyping: s.prototyping
+        }));
       } else {
         // Initialize settings if empty
-        setDoc(settingsDoc, { ownerName: DEFAULT_PORTFOLIO_DATA.ownerName });
+        setDoc(settingsDoc, { 
+          ownerName: DEFAULT_PORTFOLIO_DATA.ownerName,
+          workExperience: DEFAULT_PORTFOLIO_DATA.workExperience,
+          education: DEFAULT_PORTFOLIO_DATA.education,
+          modeling: DEFAULT_PORTFOLIO_DATA.modeling,
+          softSkill: DEFAULT_PORTFOLIO_DATA.softSkill,
+          visualization: DEFAULT_PORTFOLIO_DATA.visualization,
+          prototyping: DEFAULT_PORTFOLIO_DATA.prototyping
+        });
       }
     });
 
@@ -121,6 +144,11 @@ function usePortfolioData() {
 }
 
 type ViewState = 'work' | 'about';
+
+const splitSkills = (skills: string | undefined, fallback: string) => {
+  const value = (skills || fallback || '').trim();
+  return value.split(/\s*[\/\,]\s*/).filter(Boolean);
+};
 
 // --- Sound Engine Helper ---
 const SoundManager = {
@@ -208,7 +236,7 @@ const CustomCursor = () => {
       const computedStyle = window.getComputedStyle(target);
       setIsPointer(
         computedStyle.cursor === 'pointer' || 
-        ['BUTTON', 'A', 'INPUT'].includes(target.tagName) ||
+        ['BUTTON', 'A', 'INPUT', 'TEXTAREA'].includes(target.tagName) ||
         target.closest('button') !== null ||
         target.closest('a') !== null
       );
@@ -257,46 +285,119 @@ const Logo = ({ className = "w-16 h-32" }: { className?: string }) => (
   />
 );
 
-const LoopingGallery = ({ images, interval = 3000 }: { images: string[], interval?: number }) => {
+const LoopingGallery = ({ images, interval = 16000, isAdmin, onImagesChange, isHovered, trigger, alwaysCover = false, disableInteraction = false }: { images: string[], interval?: number, isAdmin?: boolean, onImagesChange?: (newImages: string[]) => void, isHovered?: boolean, trigger?: number, alwaysCover?: boolean, disableInteraction?: boolean }) => {
   const [index, setIndex] = useState(0);
+  const [prevIndex, setPrevIndex] = useState<number | null>(null);
+  const [isManual, setIsManual] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const manualTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTriggerRef = useRef<number | null>(null);
+  const indexRef = useRef(index);
 
   useEffect(() => {
-    if (images.length <= 1) return;
-    const timer = setInterval(() => {
+    indexRef.current = index;
+  }, [index]);
+
+  const next = () => {
+    setPrevIndex(indexRef.current);
+    setIndex((prev) => (prev + 1) % images.length);
+  };
+
+  const prev = () => {
+    setPrevIndex(indexRef.current);
+    setIndex((prev) => (prev - 1 + images.length) % images.length);
+  };
+
+  useEffect(() => {
+    if (images.length <= 1 || isManual || trigger !== undefined) return;
+    timerRef.current = setInterval(next, interval);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [images, interval, isManual, trigger]);
+
+  useEffect(() => {
+    if (trigger === undefined) return;
+    if (lastTriggerRef.current === null) {
+      lastTriggerRef.current = trigger;
+      return;
+    }
+    if (trigger !== lastTriggerRef.current) {
+      lastTriggerRef.current = trigger;
+      if (images.length <= 1) return;
+      setPrevIndex(indexRef.current);
       setIndex((prev) => (prev + 1) % images.length);
-    }, interval);
-    return () => clearInterval(timer);
-  }, [images, interval]);
+    }
+  }, [trigger, images.length]);
 
-  if (!images || images.length === 0) return null;
 
-  // Dynamic Pagination for Gallery
+  const removeImage = (i: number) => {
+    if (!onImagesChange) return;
+    const newImages = images.filter((_, idx) => idx !== i);
+    onImagesChange(newImages);
+    if (index >= newImages.length) setIndex(0);
+    setPrevIndex(null);
+    SoundManager.playClick();
+  };
+
+  if (!images || images.length === 0) return (
+    <div className="w-full h-full bg-zinc-100 flex items-center justify-center">
+       <span className="text-[10px] font-mono opacity-20 uppercase tracking-widest">No Media</span>
+    </div>
+  );
+
   const n = images.length;
-  const targetW = 40; // smaller for internal gallery
+  const targetW = 40;
   const avail = targetW / n;
   const gap = Math.max(2, avail * 0.3); 
   const size = Math.min(4, Math.max(2, avail - gap));
 
   return (
-    <div className="w-full h-full relative overflow-hidden">
-      <AnimatePresence mode="wait">
+    <div className={`w-full h-full relative overflow-hidden bg-zinc-950 touch-none group/gallery ${disableInteraction ? 'pointer-events-none' : ''}`}>
+      <div className="absolute inset-0">
+        {prevIndex !== null && (
+          <img
+            src={images[prevIndex]}
+            className={`absolute inset-0 w-full h-full ${alwaysCover ? 'object-cover' : (isHovered ? 'object-contain' : 'object-cover')}`}
+            style={{ zIndex: 0, opacity: 1, backgroundColor: 'transparent' }}
+            referrerPolicy="no-referrer"
+          />
+        )}
+
         <motion.img
-          key={images[index]}
+          key={`current-${index}`}
           src={images[index]}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 3 }} // 3x slower transition duration
-          className="w-full h-full object-cover"
+          transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
+          onAnimationComplete={() => setPrevIndex(null)}
+          onClick={!disableInteraction ? (e) => {
+            e.stopPropagation();
+            setIsManual(true);
+            next();
+            SoundManager.playClick();
+          } : undefined}
+          className={`absolute inset-0 w-full h-full ${!disableInteraction ? 'cursor-pointer' : ''} ${alwaysCover ? 'object-cover' : (isHovered ? 'object-contain' : 'object-cover')}`}
+          style={{ zIndex: 1, willChange: 'opacity, transform', backgroundColor: 'transparent' }}
           referrerPolicy="no-referrer"
         />
-      </AnimatePresence>
+      </div>
+      
+      {isAdmin && (
+        <button 
+          onClick={() => removeImage(index)}
+          className="absolute top-4 right-4 z-30 p-2 bg-red-500 text-white rounded-full opacity-0 group-hover/gallery:opacity-100 transition-opacity active:scale-90"
+        >
+          <Trash2 size={12} />
+        </button>
+      )}
+
       {images.length > 1 && (
-        <div className="absolute bottom-3 right-3 flex" style={{ gap: `${gap}px` }}>
+        <div className="absolute bottom-3 right-3 flex z-20 pointer-events-none" style={{ gap: `${gap}px` }}>
           {images.map((_, i) => (
             <div 
               key={i} 
-              className={`rounded-full transition-all duration-300 ${i === index ? 'bg-orange-500 scale-125' : 'bg-orange-200/20'} backdrop-blur-sm border border-white/10`} 
+              className={`rounded-full transition-all duration-300 ${i === index ? 'bg-black scale-125' : 'bg-black/10'} backdrop-blur-sm border border-white/10`} 
               style={{ width: `${size}px`, height: `${size}px` }}
             />
           ))}
@@ -306,23 +407,150 @@ const LoopingGallery = ({ images, interval = 3000 }: { images: string[], interva
   );
 };
 
-const AboutPage = () => {
+const CVPage = ({ data }: { data: PortfolioData }) => {
+  const sectionItems = useMemo(() => [
+    { id: 'spec-objective', label: 'About' },
+    { id: 'work-experience', label: 'Work' },
+    { id: 'education', label: 'Studies' },
+    { id: 'technical-stack', label: 'Tech' },
+    { id: 'contact-hq', label: 'Contact' },
+  ], []);
+
+  const [activeBulletIndex, setActiveBulletIndex] = useState(0);
+  const [lineMetrics, setLineMetrics] = useState({ top: 0, maxHeight: 0 });
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const navRef = useRef<HTMLDivElement | null>(null);
+  const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const { scrollYProgress } = useScroll({ container: containerRef });
+  const lineScale = useTransform(scrollYProgress, [0, 0.95], [0, 1]);
+  const smoothLineScale = useSpring(lineScale, { damping: 24, stiffness: 160 });
+  const activeIndexMotion = useTransform(scrollYProgress, [0, 1], [0, sectionItems.length - 1]);
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const nav = navRef.current;
+      const buttons = buttonRefs.current.filter(Boolean) as HTMLButtonElement[];
+      if (!nav || buttons.length === 0) return;
+
+      const firstButton = buttons[0];
+      const lastButton = buttons[buttons.length - 1];
+      if (!firstButton || !lastButton) return;
+
+      const navRect = nav.getBoundingClientRect();
+      const firstRect = firstButton.getBoundingClientRect();
+      const lastRect = lastButton.getBoundingClientRect();
+
+      const firstCenter = firstRect.top - navRect.top + firstRect.height / 2;
+      const lastCenter = lastRect.top - navRect.top + lastRect.height / 2;
+
+      setLineMetrics({
+        top: firstCenter,
+        maxHeight: Math.max(0, lastCenter - firstCenter),
+      });
+    };
+
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [sectionItems.length]);
+
+  useEffect(() => {
+    const unsubscribe = activeIndexMotion.on('change', (latest) => {
+      const index = Math.min(sectionItems.length - 1, Math.max(0, Math.round(latest)));
+      setActiveBulletIndex(index);
+    });
+
+    return unsubscribe;
+  }, [activeIndexMotion, sectionItems.length]);
+
+  const scrollToSection = (id: string) => {
+    const container = containerRef.current;
+    const el = document.getElementById(id);
+    if (!container || !el) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const elementRect = el.getBoundingClientRect();
+    const offset = elementRect.top - containerRect.top - container.clientHeight * 0.2;
+
+    container.scrollTo({
+      top: container.scrollTop + offset,
+      behavior: 'smooth',
+    });
+  };
+
   return (
     <motion.div 
+      ref={containerRef}
+      id="cv-scroll-container"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       className="fixed inset-0 z-10 bg-white overflow-y-auto px-6 pt-32 pb-20 md:px-20 md:pt-40"
     >
-      <div className="max-w-4xl mx-auto space-y-16">
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-12">
+      <div className="max-w-4xl   mx-auto space-y-16 relative" style={{ marginTop: '60px' }}>
+        <div className="lg:hidden  bg-white/40 fixed left-0 right-0 z-50  backdrop-blur-md" style={{ top: 'var(--header-height, 4.5rem)' }}>
+          <div className="flex items-center justify-between gap-1 px-2 py-3 overflow-hidden text-[10px] uppercase tracking-[0.18em]">
+            {sectionItems.map((section, index) => {
+              const isActive = activeBulletIndex === index;
+              return (
+                <button
+                  key={section.id}
+                  onClick={() => scrollToSection(section.id)}
+                  className={`min-w-0 flex-1 text-center rounded-full border px-2 py-2 text-[10px] transition-colors ${isActive ? 'border-black bg-black text-white' : 'border-zinc-200 bg-white text-zinc-600 hover:border-black hover:text-black'}`}
+                  type="button"
+                >
+                  {section.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <aside className="hidden lg:block fixed left-6 top-1/2 z-20 -translate-y-1/2">
+          <div ref={navRef} className="relative flex flex-col items-start gap-8 px-1 py-4">
+            <div className="absolute left-[calc(var(--spacing)*2.6)] top-7 h-[calc(100%-3.5rem)] w-px bg-zinc-200" />
+            <motion.div
+              className="absolute left-[calc(var(--spacing)*2.6)] w-px bg-black"
+              initial={false}
+              transition={{ type: 'spring', stiffness: 120, damping: 22 }}
+              style={{
+                top: lineMetrics.top,
+                height: lineMetrics.maxHeight,
+                scaleY: smoothLineScale,
+                transformOrigin: 'top',
+              }}
+            />
+            {sectionItems.map((section, index) => {
+              const isActive = activeBulletIndex === index;
+              return (
+                <button
+                  ref={(el) => { buttonRefs.current[index] = el; }}
+                  data-section-id={section.id}
+                  key={section.id}
+                  onClick={() => scrollToSection(section.id)}
+                  className="relative flex h-10 items-center gap-3 text-left"
+                  type="button"
+                >
+                  <span className={`relative z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full border ${isActive ? 'border-black bg-black' : 'border-zinc-300 bg-white'}`}>
+                    <span className={`block h-2 w-2 rounded-full ${isActive ? 'bg-white' : 'bg-zinc-300'}`} />
+                  </span>
+                  <span className={`text-[10px] uppercase tracking-[0.3em] transition-colors ${isActive ? 'text-black font-semibold' : 'text-zinc-500'}`}>
+                    {section.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        <section id="spec-objective" className="grid grid-cols-1 md:grid-cols-2 gap-12">
           <div className="space-y-6">
             <h2 className="text-[10px] font-mono uppercase tracking-[0.4em] text-zinc-400">Spec / Objective</h2>
             <p className="text-2xl md:text-3xl font-display font-medium leading-tight">
               Bridging the gap between raw material intelligence and human-centric utility through intentional industrial geometry.
             </p>
           </div>
-          <div className="text-zinc-500 font-mono text-[11px] leading-relaxed space-y-4">
+          <div className="text-zinc-500 font-mono text-[11px] leading-relaxed space-y-4 whitespace-pre-wrap">
             <p>
               Based in the intersection of digital craft and physical manufacturing, my practice focuses on high-performance product development and speculative industrial design.
             </p>
@@ -332,36 +560,92 @@ const AboutPage = () => {
           </div>
         </section>
 
-        <section className="border-t border-black/5 pt-12">
+        {(Array.isArray(data.workExperience) || Array.isArray(data.education)) && (
+          <section id="work-experience" className="border-t border-black/5 pt-12 space-y-20">
+            {Array.isArray(data.workExperience) && data.workExperience.length > 0 && (
+              <div className="space-y-12">
+                <h2 className="text-[10px] font-mono uppercase tracking-[0.4em] text-zinc-400">Work Experience</h2>
+                <div className="space-y-16">
+                  {data.workExperience.map((exp) => (
+                    <div key={exp.id} className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-12">
+                      <div className="md:col-span-1">
+                        <span className="text-[11px] uppercase tracking-widest font-bold opacity-60 italic">{exp.date}</span>
+                      </div>
+                      <div className="md:col-span-3 space-y-4">
+                        <div className="space-y-1">
+                          <h3 className="text-xl font-display font-bold uppercase tracking-tight">{exp.title}</h3>
+                          <p className="text-[10px] uppercase tracking-widest font-bold opacity-60 italic">{exp.subtitle}</p>
+                        </div>
+                        <p className="text-sm text-zinc-600 leading-relaxed font-mono">{exp.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {Array.isArray(data.education) && data.education.length > 0 && (
+              <div id="education" className="space-y-12 border-t border-black/5 pt-12">
+                <h2 className="text-[10px] font-mono uppercase tracking-[0.4em] text-zinc-400">Education</h2>
+                <div className="space-y-16">
+                  {data.education.map((edu) => (
+                    <div key={edu.id} className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-12">
+                      <div className="md:col-span-1">
+                        <span className="text-[10px] font-mono tracking-widest opacity-40 block">{edu.date}</span>
+                      </div>
+                      <div className="md:col-span-3 space-y-4">
+                        <div className="space-y-1">
+                          <h3 className="text-xl font-display font-bold uppercase tracking-tight">{edu.title}</h3>
+                          <p className="text-[10px] uppercase tracking-widest font-bold opacity-60 italic">{edu.subtitle}</p>
+                        </div>
+                        <p className="text-sm text-zinc-600 leading-relaxed font-mono">{edu.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        <section id="technical-stack" className="border-t border-black/5 pt-12">
           <h2 className="text-[10px] font-mono uppercase tracking-[0.4em] text-zinc-400 mb-8">Technical Stack</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div className="space-y-2">
               <span className="block text-[9px] uppercase font-bold tracking-widest">Modeling</span>
-              <span className="block text-sm opacity-60">Rhino / Grasshopper</span>
+              {splitSkills(data.modeling, "Rhino / Grasshopper").map((skill, index) => (
+                <span key={index} className="block text-sm opacity-60">{skill}</span>
+              ))}
             </div>
             <div className="space-y-2">
-              <span className="block text-[9px] uppercase font-bold tracking-widest">Surfacing</span>
-              <span className="block text-sm opacity-60">Alias / Fusion 360</span>
+              <span className="block text-[9px] uppercase font-bold tracking-widest">Soft Skill</span>
+              {splitSkills(data.softSkill, "Alias / Fusion 360").map((skill, index) => (
+                <span key={index} className="block text-sm opacity-60">{skill}</span>
+              ))}
             </div>
             <div className="space-y-2">
               <span className="block text-[9px] uppercase font-bold tracking-widest">Visualization</span>
-              <span className="block text-sm opacity-60">KeyShot / Octane</span>
+              {splitSkills(data.visualization, "KeyShot / Octane").map((skill, index) => (
+                <span key={index} className="block text-sm opacity-60">{skill}</span>
+              ))}
             </div>
             <div className="space-y-2">
               <span className="block text-[9px] uppercase font-bold tracking-widest">Prototyping</span>
-              <span className="block text-sm opacity-60">SLA / FDM Printing</span>
+              {splitSkills(data.prototyping, "SLA / FDM Printing").map((skill, index) => (
+                <span key={index} className="block text-sm opacity-60">{skill}</span>
+              ))}
             </div>
           </div>
         </section>
 
-        <section className="border-t border-black/5 pt-12 pb-20">
+        <section id="contact-hq" className="border-t border-black/5 pt-12 pb-20">
           <div className="flex flex-col md:flex-row justify-between gap-12">
             <div className="space-y-8 max-w-sm">
               <h2 className="text-[10px] font-mono uppercase tracking-[0.4em] text-zinc-400">Contact / HQ</h2>
               <div className="space-y-2">
                 <p className="text-sm font-bold uppercase tracking-tight">Studio Archive 04</p>
-                <p className="text-sm opacity-60">Industrial Product Design Office</p>
-                <p className="text-sm opacity-60">ema.uleckaite@gmail.com</p>
+                <p className="text-sm opacity-60">Industrial Product Design</p>
+                <p className="text-sm opacity-60">domgarm@gmail.com</p>
               </div>
             </div>
             <div className="flex-1 flex flex-col justify-end items-end">
@@ -394,47 +678,62 @@ const Header = ({
   onChangeView: (view: ViewState) => void,
   showAdminInterface: boolean
 }) => {
+  const headerRef = useRef<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    const measureHeader = () => {
+      if (!headerRef.current) return;
+      const height = headerRef.current.getBoundingClientRect().height;
+      document.documentElement.style.setProperty('--header-height', `${height}px`);
+    };
+
+    measureHeader();
+    window.addEventListener('resize', measureHeader);
+    return () => window.removeEventListener('resize', measureHeader);
+  }, []);
+
   return (
-    <header className="fixed top-0 left-0 w-full z-50 p-6 md:p-10 flex justify-between items-start pointer-events-none">
-      <div className="flex gap-8 pointer-events-auto items-center">
-        <button 
-          onClick={() => onChangeView('work')}
-          className="flex gap-4 items-center text-left group"
-        >
-          <Logo className="w-8 h-16 group-hover:scale-110 transition-transform duration-500" />
+    <header ref={headerRef} className="fixed pb-0 top-0 left-0 w-full z-50 px-6 py-4 md:px-10 md:py-4 bg-white/40 backdrop-blur-md">
+      <div className="flex justify-between items-center">
+        <div className="flex gap-8 items-center p-2 rounded-sm">
+          <button 
+            onClick={() => onChangeView('work')}
+            className="flex gap-4 items-center text-left group"
+          >
+          <Logo className="w-8 h-10 group-hover:scale-110 transition-transform duration-500" />
           <div className="flex flex-col">
-            <span className="text-xl font-display font-bold tracking-tighter uppercase group-hover:opacity-60 transition-opacity">{data.ownerName}</span>
-            <span className="text-[10px] uppercase tracking-widest opacity-40 font-mono italic">Studio V.04</span>
+            <span className="text-xl md:text-2xl font-display font-bold tracking-tighter uppercase group-hover:opacity-60 transition-opacity leading-none text-black">{data.ownerName}</span>
+            <span className="text-[9px] uppercase tracking-[0.3em] opacity-40 font-mono italic text-black">Studio V.04</span>
           </div>
         </button>
       </div>
 
-      <div className="flex gap-8 pointer-events-auto items-end flex-col md:flex-row">
-        <nav className="flex gap-8 text-black">
+      <div className="flex gap-8 items-center flex-row">
+        <nav className="flex gap-8 text-black p-2 rounded-sm items-center">
           <button 
             onClick={() => onChangeView('work')}
-            className={`text-sm font-bold uppercase tracking-tight transition-all pb-1 border-b-2 ${activeView === 'work' ? 'border-black opacity-100' : 'border-transparent opacity-40 hover:opacity-100'}`}
+            className={`text-xs md:text-sm font-bold uppercase tracking-[0.2em] transition-all ${activeView === 'work' ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}
           >
-            Work
+            Archive
           </button>
           <button 
             onClick={() => onChangeView('about')}
-            className={`text-sm font-bold uppercase tracking-tight transition-all pb-1 border-b-2 ${activeView === 'about' ? 'border-black opacity-100' : 'border-transparent opacity-40 hover:opacity-100'}`}
+            className={`text-xs md:text-sm font-bold uppercase tracking-[0.2em] transition-all ${activeView === 'about' ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}
           >
-            About
+            CV
           </button>
         </nav>
         
         {showAdminInterface && (
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 p-4 rounded-sm">
             {user && (
-               <span className="text-[9px] uppercase font-mono bg-black/5 px-2 py-1 hidden md:block">Connected: {user.email}</span>
+               <span className="text-[9px] uppercase font-mono hidden md:block opacity-40 text-black">{user.email}</span>
             )}
             <button 
               onClick={onToggleAdmin}
-              className={`px-3 py-1 text-[10px] uppercase tracking-widest border transition-all ${isAdmin ? 'bg-black text-white border-black' : 'border-black/20 hover:border-black text-black'}`}
+              className={`px-4 py-1.5 text-[9px] font-bold uppercase tracking-widest border transition-all ${isAdmin ? 'bg-black text-white border-black' : 'border-black/20 hover:border-black text-black'}`}
             >
-              {isAdmin ? 'Exit Admin' : 'Admin'}
+              / {isAdmin ? 'Lock' : 'Access'}
             </button>
             {user && (
               <button onClick={() => logout()} className="text-black/30 hover:text-black transition-colors" title="Logout">
@@ -444,19 +743,28 @@ const Header = ({
           </div>
         )}
       </div>
+    </div>
     </header>
   );
 };
 
 const ThreeDCarousel = ({ items, onSelectItem }: { items: PortfolioItem[], onSelectItem: (item: PortfolioItem) => void }) => {
   const dragContainer = useRef<HTMLDivElement>(null);
-  const rotationRef = useRef({ x: -10, y: 0, autoY: 0 });
+  const rotationRef = useRef({ x: -10, y: 0, autoY: 0, autoX: 0 });
   const mouseRef = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
   const isHoveredRef = useRef(false);
   const itemsRef = useRef(items);
   const [radius, setRadius] = useState(480);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const focusedIndexRef = useRef(0);
+  const [isMobileCarousel, setIsMobileCarousel] = useState(window.innerWidth <= 640);
+
+  useEffect(() => {
+    const sync = () => setIsMobileCarousel(window.innerWidth <= 640);
+    window.addEventListener('resize', sync);
+    sync();
+    return () => window.removeEventListener('resize', sync);
+  }, []);
 
   // Sync ref for animation loop to avoid stale closures
   useEffect(() => {
@@ -477,18 +785,53 @@ const ThreeDCarousel = ({ items, onSelectItem }: { items: PortfolioItem[], onSel
     let requestId: number;
 
     const applyTransform = (target: HTMLDivElement) => {
-      if (tY > 180) tY = 180;
-      if (tY < 0) tY = 0;
+      // Limit X-axis rotation to strictly track within +/- 15 degrees
+      if (tY > 15) tY = 15;
+      if (tY < -15) tY = -15;
+      
       const rotY = tX + rotationRef.current.autoY;
-      target.style.transform = `rotateX(${-tY}deg) rotateY(${rotY}deg)`;
+      const currentAngle = isMobileCarousel ? rotationRef.current.autoX : rotY;
+      if (isMobileCarousel) {
+        target.style.transform = `rotateY(0deg) rotateX(${currentAngle}deg)`;
+      } else {
+        target.style.transform = `rotateX(${-tY}deg) rotateY(${rotY}deg)`;
+      }
 
-      // Update active dot
+      // Update active dot and apply depth fog
       if (itemsRef.current.length > 0) {
         const step = 360 / itemsRef.current.length;
-        const index = ((Math.round(-rotY / step) % itemsRef.current.length) + itemsRef.current.length) % itemsRef.current.length;
-        if (index !== focusedIndexRef.current) {
-          focusedIndexRef.current = index;
-          setFocusedIndex(index);
+        const effectiveAngle = isMobileCarousel ? rotationRef.current.autoX : rotationRef.current.autoY;
+        const activeIndex = ((Math.round(-effectiveAngle / step) % itemsRef.current.length) + itemsRef.current.length) % itemsRef.current.length;
+        if (activeIndex !== focusedIndexRef.current) {
+          focusedIndexRef.current = activeIndex;
+          setFocusedIndex(activeIndex);
+        }
+
+        // Apply depth-based fog (opacity + blur) to each item element
+        const itemElements = target.querySelectorAll('.absolute.pointer-events-auto');
+        if (itemElements.length === itemsRef.current.length) {
+          itemElements.forEach((el, index) => {
+            const itemAngle = index * (360 / itemsRef.current.length);
+            const absoluteAngle = isMobileCarousel 
+              ? rotationRef.current.autoX + itemAngle 
+              : rotY + itemAngle;
+            
+            const rad = (absoluteAngle * Math.PI) / 180;
+            const zCos = Math.cos(rad); // ranges from -1 (furthest/back) to 1 (closest/front)
+            
+            // Map depth to scale, opacity and blur
+            const normalizedDepth = (zCos + 1) / 2; // ranges from 0 (back) to 1 (front)
+            
+            // Opacity: 0.15 at back, 1.0 at front
+            const opacity = 0.15 + 0.85 * normalizedDepth;
+            
+            // Blur: up to 6px at absolute back
+            const blur = (1 - normalizedDepth) * 6;
+            
+            const htmlEl = el as HTMLElement;
+            htmlEl.style.opacity = opacity.toFixed(3);
+            htmlEl.style.filter = blur > 0.1 ? `blur(${blur.toFixed(1)}px)` : 'none';
+          });
         }
       }
     };
@@ -504,7 +847,11 @@ const ThreeDCarousel = ({ items, onSelectItem }: { items: PortfolioItem[], onSel
           mouseRef.current.y > window.innerHeight - margin;
         
         const speedMultiplier = isNearEdge ? 4.0 : 1.0;
-        rotationRef.current.autoY += 0.05 * speedMultiplier; 
+        if (isMobileCarousel) {
+          rotationRef.current.autoX += 0.05 * speedMultiplier;
+        } else {
+          rotationRef.current.autoY += 0.05 * speedMultiplier;
+        }
         
         if (dragContainer.current) applyTransform(dragContainer.current);
       }
@@ -524,13 +871,25 @@ const ThreeDCarousel = ({ items, onSelectItem }: { items: PortfolioItem[], onSel
         const nX = moveEvent.clientX;
         const nY = moveEvent.clientY;
         
-        desX = nX - sX;
-        desY = nY - sY;
+        const deltaX = nX - sX;
+        const deltaY = nY - sY;
         
-        if (Math.abs(desX) > 10) SoundManager.playSwoosh();
+        desX = deltaX;
+        desY = deltaY;
         
-        tX += desX * 0.15;
-        tY += desY * 0.15;
+        // Use a cooldown or stronger threshold for sound to avoid performance hit
+        if (Math.abs(desX) > 20 && !window.swooshPlaying) {
+          SoundManager.playSwoosh();
+          window.swooshPlaying = true;
+          setTimeout(() => { window.swooshPlaying = false; }, 400);
+        }
+        
+        if (isMobileCarousel) {
+          rotationRef.current.autoX += desY * 0.1;
+        } else {
+          tX += desX * 0.1;
+          tY += desY * 0.1;
+        }
         
         if (dragContainer.current) applyTransform(dragContainer.current);
         
@@ -543,8 +902,12 @@ const ThreeDCarousel = ({ items, onSelectItem }: { items: PortfolioItem[], onSel
         timer = setInterval(() => {
           desX *= 0.95;
           desY *= 0.95;
-          tX += desX * 0.1;
-          tY += desY * 0.1;
+          if (isMobileCarousel) {
+            rotationRef.current.autoX += desY * 0.1;
+          } else {
+            tX += desX * 0.1;
+            tY += desY * 0.1;
+          }
           
           if (dragContainer.current) applyTransform(dragContainer.current);
           
@@ -563,7 +926,11 @@ const ThreeDCarousel = ({ items, onSelectItem }: { items: PortfolioItem[], onSel
 
     const handleWheel = (e: WheelEvent) => {
       const delta = e.deltaY;
-      tX += delta * 0.05;
+      if (isMobileCarousel) {
+        rotationRef.current.autoX += delta * 0.02;
+      } else {
+        tX += delta * 0.05;
+      }
       if (dragContainer.current) applyTransform(dragContainer.current);
     };
 
@@ -649,10 +1016,10 @@ const ThreeDCarousel = ({ items, onSelectItem }: { items: PortfolioItem[], onSel
                animate={{ 
                  opacity: i === focusedIndex ? 1 : 0.3, 
                  scale: i === focusedIndex ? 1.2 : 1,
-                 backgroundColor: i === focusedIndex ? '#f97316' : '#fdba744d' // Orange shades
+                 backgroundColor: i === focusedIndex ? '#f97316' : '#00000033' 
                }}
                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-               className="backdrop-blur-md border border-white/20 shadow-sm"
+               className="shadow-sm"
                style={{ 
                  width: `${dotSize}px`, 
                  height: `${dotSize}px`,
@@ -661,7 +1028,7 @@ const ThreeDCarousel = ({ items, onSelectItem }: { items: PortfolioItem[], onSel
              />
            ))}
          </div>
-         <span className="text-[9px] uppercase tracking-[0.4em] font-mono opacity-20">Orbit Archive</span>
+         <span className="text-[9px] uppercase tracking-[0.6em] font-mono opacity-30 px-4 py-1">Orbit Archive</span>
       </div>
     );
   };
@@ -683,13 +1050,12 @@ const ThreeDCarousel = ({ items, onSelectItem }: { items: PortfolioItem[], onSel
             onMouseLeave={() => { isHoveredRef.current = false; }}
             style={{ 
               transformStyle: 'preserve-3d',
-              transform: `rotateX(-10deg) rotateY(0deg)`,
+              transform: isMobileCarousel ? 'rotateY(22deg) rotateX(0deg)' : 'rotateX(-10deg) rotateY(0deg)',
               width: '100%',
               height: '100%',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transition: 'transform 0.1s linear',
               pointerEvents: 'auto'
             }}
           >
@@ -714,7 +1080,7 @@ const ThreeDCarousel = ({ items, onSelectItem }: { items: PortfolioItem[], onSel
                     style={{
                       width: `${width}px`,
                       height: `${height}px`,
-                      transform: `rotateY(${i * (360 / items.length)}deg) translateZ(${radius}px)`,
+                      transform: isMobileCarousel ? `rotateX(${i * (360 / items.length)}deg) translateZ(${radius}px)` : `rotateY(${i * (360 / items.length)}deg) translateZ(${radius}px)`,
                       transformStyle: 'preserve-3d',
                       left: `-${width / 2}px`,
                       top: `-${height / 2}px`,
@@ -724,19 +1090,15 @@ const ThreeDCarousel = ({ items, onSelectItem }: { items: PortfolioItem[], onSel
                       {item.stlUrl ? (
                         <StlViewer url={item.stlUrl} isThumbnail />
                       ) : (
-                        item.images && item.images.length > 1 ? (
-                          <LoopingGallery images={item.images} interval={12000} />
-                        ) : (
-                          <img 
-                            src={item.imageUrl} 
-                            alt={item.title} 
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        )
+                        <img 
+                          src={item.imageUrl} 
+                          alt={item.title} 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
                       )}
                       
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-5">
+                      <div className="absolute inset-0 z-20 pointer-events-none bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-5">
                         <div className="space-y-0.5">
                           <p className="text-white/60 text-[8px] uppercase tracking-widest font-mono">{item.category}</p>
                           <h3 className="text-white font-display font-medium uppercase text-[11px] tracking-widest">{item.title}</h3>
@@ -771,16 +1133,135 @@ const ThreeDCarousel = ({ items, onSelectItem }: { items: PortfolioItem[], onSel
 
 const ProjectCard = ({ item, onClose, isAdmin }: { item: PortfolioItem, onClose: () => void, isAdmin?: boolean }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const [isEditingLabel, setIsEditingLabel] = useState(false);
+  const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [imageScale, setImageScale] = useState(1);
+  const [imageOffset, setImageOffset] = useState({ x: 0, y: 0 });
+  const [isUploading, setIsUploading] = useState(false);
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const baseDistanceRef = useRef(0);
+  const baseScaleRef = useRef(1);
+  const panStartRef = useRef({ x: 0, y: 0 });
+  const lastPanRef = useRef({ x: 0, y: 0 });
+  const isPanningRef = useRef(false);
+  
+  // Editable states
   const [tempLabel, setTempLabel] = useState(item.label || "Case Study 2026");
+  const [tempTitle, setTempTitle] = useState(item.title);
+  const [tempYear, setTempYear] = useState(item.year || "");
+  const [tempCategory, setTempCategory] = useState(item.category || "");
+  const [tempDesc, setTempDesc] = useState(item.description || "");
 
-  const updateLabel = async () => {
+  // Update local state if item changes
+  useEffect(() => {
+    setTempLabel(item.label || "Case Study 2026");
+    setTempTitle(item.title);
+    setTempYear(item.year || "");
+    setTempCategory(item.category || "");
+    setTempDesc(item.description || "");
+  }, [item.id]);
+
+  const updateField = async (field: string, value: any) => {
     try {
-      await updateDoc(doc(db, 'projects', item.id), { label: tempLabel });
-      setIsEditingLabel(false);
+      await updateDoc(doc(db, 'projects', item.id), { [field]: value });
       SoundManager.playClick();
     } catch (err) {
       console.error("Update failed", err);
+    }
+  };
+
+  const handleFileUpload = async (file: File) => {
+    setIsUploading(true);
+    try {
+      const path = `projects/${item.id}/${Date.now()}_${file.name}`;
+      const storageRef = sRef(storage, path);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      
+      const newImages = [...(item.images || []), url];
+      await updateField('images', newImages);
+      if (!item.imageUrl) await updateField('imageUrl', url);
+    } catch (err) {
+      console.error("Upload failed", err);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isImagePreviewOpen) {
+      setImageScale(1);
+      setImageOffset({ x: 0, y: 0 });
+      pointersRef.current.clear();
+      baseDistanceRef.current = 0;
+      baseScaleRef.current = 1;
+      panStartRef.current = { x: 0, y: 0 };
+      lastPanRef.current = { x: 0, y: 0 };
+      isPanningRef.current = false;
+    }
+  }, [isImagePreviewOpen, previewIndex]);
+
+  const clampOffset = (offset: { x: number; y: number }, scale: number) => {
+    const maxShift = Math.max(0, (scale - 1) * 1000);
+    return {
+      x: Math.max(-maxShift, Math.min(maxShift, offset.x)),
+      y: Math.max(-maxShift, Math.min(maxShift, offset.y)),
+    };
+  };
+
+  const handlePreviewPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (pointersRef.current.size === 2) {
+      const points = Array.from(pointersRef.current.values());
+      baseDistanceRef.current = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
+      baseScaleRef.current = imageScale;
+      isPanningRef.current = false;
+    } else if (pointersRef.current.size === 1) {
+      panStartRef.current = { x: event.clientX, y: event.clientY };
+      lastPanRef.current = imageOffset;
+      isPanningRef.current = imageScale > 1;
+    }
+  };
+
+  const handlePreviewPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointersRef.current.has(event.pointerId)) return;
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (pointersRef.current.size === 2) {
+      const points = Array.from(pointersRef.current.values());
+      const distance = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
+      const nextScale = Math.max(1, Math.min(4, baseScaleRef.current * (distance / Math.max(baseDistanceRef.current, 1))));
+      setImageScale(nextScale);
+      if (nextScale <= 1) {
+        setImageOffset({ x: 0, y: 0 });
+      } else {
+        setImageOffset((current) => clampOffset(current, nextScale));
+      }
+    } else if (pointersRef.current.size === 1 && isPanningRef.current) {
+      const currentPoint = pointersRef.current.get(event.pointerId);
+      if (!currentPoint) return;
+      const deltaX = currentPoint.x - panStartRef.current.x;
+      const deltaY = currentPoint.y - panStartRef.current.y;
+      setImageOffset(clampOffset({ x: lastPanRef.current.x + deltaX, y: lastPanRef.current.y + deltaY }, imageScale));
+    }
+  };
+
+  const handlePreviewPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    pointersRef.current.delete(event.pointerId);
+    if (pointersRef.current.size < 2) {
+      isPanningRef.current = false;
+    }
+  };
+
+  const handlePreviewDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    if (imageScale === 1) {
+      setImageScale(2);
+    } else {
+      setImageScale(1);
+      setImageOffset({ x: 0, y: 0 });
     }
   };
 
@@ -789,7 +1270,7 @@ const ProjectCard = ({ item, onClose, isAdmin }: { item: PortfolioItem, onClose:
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[110] flex items-center justify-center p-4 md:p-10 bg-white/5 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[110] flex items-center justify-center p-4 md:p-10 bg-white/5 crispy-glass"
       onClick={onClose}
     >
       <motion.div 
@@ -797,72 +1278,192 @@ const ProjectCard = ({ item, onClose, isAdmin }: { item: PortfolioItem, onClose:
         animate={{ y: 0, opacity: 1, rotateX: 0 }}
         exit={{ y: 80, opacity: 0, rotateX: 20 }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="w-full max-w-[1100px] min-h-[600px] bg-white/40 backdrop-blur-3xl border border-white/50 shadow-[0_40px_100px_rgba(0,0,0,0.12)] flex flex-col lg:flex-row"
+        className="w-full max-w-[1100px] max-h-[calc(100vh-4rem)] min-h-[600px] flex flex-col lg:flex-row relative overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <motion.div 
-          className="w-full lg:w-[50%] h-[400px] lg:h-auto p-6 md:p-8 cursor-pointer relative group/photo"
+          className="w-full lg:w-[50%] h-[400px] lg:h-auto p-0 md:p-8 cursor-pointer relative group/photo"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
-          onTouchStart={() => setIsHovered(true)}
-          onTouchEnd={() => setIsHovered(false)}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+              setIsImagePreviewOpen(true);
+            }
+          }}
         >
           <motion.div 
-            className="w-full h-full relative z-10"
+            className="w-full h-full relative z-10 lg:group-hover/photo:overflow-visible"
             animate={{ 
-              y: isHovered ? (window.innerHeight * 0.25) : 0, // Deep swipe down towards screen center
-              scale: isHovered ? 1.4 : 1, // Large scale for "whole view"
-              zIndex: isHovered ? 50 : 10
+              zIndex: isHovered ? 100 : 10
             }}
             transition={{ 
               type: 'spring', 
-              damping: 30, // "Casual" - more damped, less bouncy
-              stiffness: 60, // Slower, relaxed motion
-              mass: 2
+              damping: 30, 
+              stiffness: 60, 
+              mass: 1.2
             }}
           >
             {item.stlUrl ? (
               <StlViewer url={item.stlUrl} />
             ) : (
-              item.images && item.images.length > 1 ? (
-                <div className="w-full h-full shadow-2xl">
-                  <LoopingGallery images={item.images} interval={15000} />
+              (item.images && item.images.length > 0) || item.imageUrl ? (
+                <div className="w-full h-full shadow-2xl relative">
+                  <LoopingGallery 
+                    images={item.images && item.images.length > 0 ? item.images : [item.imageUrl].filter(Boolean) as string[]} 
+                    interval={12000} 
+                    isAdmin={isAdmin}
+                    onImagesChange={(newImgs) => updateField('images', newImgs)}
+                    isHovered={isHovered}
+                  />
+                  {isAdmin && (
+                    <label className="absolute bottom-4 left-4 z-40 bg-white/80 backdrop-blur-md p-3 rounded-full shadow-lg cursor-pointer hover:bg-white transition-all active:scale-90 border border-black/5" onClick={(e) => e.stopPropagation()}>
+                      <Plus size={16} />
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleFileUpload(file);
+                        }}
+                      />
+                    </label>
+                  )}
+                  {isUploading && (
+                    <div className="absolute inset-0 z-50 bg-white/40 backdrop-blur-sm flex items-center justify-center">
+                      <span className="text-[10px] font-mono animate-pulse uppercase tracking-[0.3em]">Uploading...</span>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <img 
-                  src={item.imageUrl} 
-                  alt={item.title} 
-                  className={`w-full h-full shadow-2xl transition-all duration-700 ${isHovered ? 'object-contain' : 'object-cover'}`}
-                  referrerPolicy="no-referrer"
-                />
+                <div className="w-full h-full bg-zinc-100 flex items-center justify-center relative">
+                  {isAdmin && (
+                    <label className="bg-white p-4 shadow-xl cursor-pointer hover:bg-zinc-50 transition-all border border-black/5 flex flex-col items-center gap-2">
+                       <ImageIcon size={24} className="opacity-40" />
+                       <span className="text-[9px] uppercase font-bold tracking-widest opacity-60">Add Main Media</span>
+                       <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleFileUpload(file);
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
               )
+            )}
+            {isImagePreviewOpen && (
+              <AnimatePresence>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[130] bg-black/95 flex flex-col items-center justify-center p-4"
+                  onClick={() => setIsImagePreviewOpen(false)}
+                >
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setIsImagePreviewOpen(false); }}
+                    className="absolute top-4 right-4 z-40 rounded-full bg-white/90 p-2 text-black"
+                  >
+                    Close
+                  </button>
+                  <div
+                    className="relative max-w-full max-h-full w-full h-full flex items-center justify-center overflow-hidden touch-none"
+                    onPointerDown={handlePreviewPointerDown}
+                    onPointerMove={handlePreviewPointerMove}
+                    onPointerUp={handlePreviewPointerUp}
+                    onPointerCancel={handlePreviewPointerUp}
+                    onDoubleClick={handlePreviewDoubleClick}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <img
+                      src={(item.images && item.images.length > 0 ? item.images[previewIndex] : item.imageUrl) || ''}
+                      alt={item.title}
+                      className="max-w-full max-h-full object-contain"
+                      style={{
+                        transform: `scale(${imageScale}) translate(${imageOffset.x / imageScale}px, ${imageOffset.y / imageScale}px)`,
+                        touchAction: 'none',
+                        cursor: imageScale > 1 ? 'grab' : 'auto',
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    {(item.images && item.images.length > 1) && (
+                      <>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setPreviewIndex((prev) => (prev - 1 + item.images!.length) % item.images!.length); }}
+                          className="absolute left-4 top-1/2 z-40 -translate-y-1/2 rounded-full bg-white/90 p-3 text-black"
+                        >
+                          ‹
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setPreviewIndex((prev) => (prev + 1) % item.images!.length); }}
+                          className="absolute right-4 top-1/2 z-40 -translate-y-1/2 rounded-full bg-white/90 p-3 text-black"
+                        >
+                          ›
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </motion.div>
+              </AnimatePresence>
             )}
           </motion.div>
         </motion.div>
         
-        <div className="flex-1 p-8 md:p-16 flex flex-col justify-between">
-          <div>
+        <div className="flex-1 min-h-0 p-8 md:p-16 flex flex-col justify-between overflow-y-auto hide-scrollbar relative z-[60] bg-white lg:bg-transparent backdrop-blur-lg lg:backdrop-blur-none">
+          <div className="relative z-[60]">
             <div className="flex justify-between items-start mb-12">
-              <div className="space-y-4">
+              <div className="space-y-4 w-full relative z-[60]">
                 <div className="flex items-center gap-3">
                    {isAdmin ? (
-                     <div className="flex items-center gap-2 group/label">
+                     <div className="flex items-center gap-2 group/label w-full max-w-xs relative z-[70]">
                        <input 
                          type="text"
                          value={tempLabel}
-                         onChange={(e) => setTempLabel(e.target.value)}
-                         onBlur={updateLabel}
-                         onKeyDown={(e) => e.key === 'Enter' && updateLabel()}
-                         className="text-[10px] font-mono uppercase tracking-[0.3em] font-bold text-black border-b border-black/10 focus:border-orange-500 outline-none bg-transparent"
+                         onChange={(e) => {
+                           e.stopPropagation();
+                           setTempLabel(e.target.value);
+                         }}
+                         onBlur={() => updateField('label', tempLabel)}
+                         className="text-[10px] font-mono uppercase tracking-[0.3em] font-bold text-black border-b border-black/10 focus:border-black outline-none bg-white lg:bg-transparent w-full cursor-text pointer-events-auto relative z-[70]"
+                         onPointerDown={(e) => e.stopPropagation()}
+                         onClick={(e) => {
+                           e.stopPropagation();
+                           e.currentTarget.focus();
+                         }}
                        />
-                       <Edit2 size={10} className="text-orange-500 opacity-0 group-hover/label:opacity-100 transition-opacity" />
+                       <Edit2 size={10} className="text-black opacity-0 group-hover/label:opacity-100 transition-opacity" />
                      </div>
                    ) : (
                      <p className="text-[10px] font-mono uppercase tracking-[0.3em] font-bold text-black/30">{item.label || "Case Study 2026"}</p>
                    )}
                    {item.stlUrl && <span className="bg-black text-white text-[8px] px-2 py-0.5 uppercase tracking-widest font-mono">3D Content</span>}
                 </div>
-                <h2 className="text-5xl md:text-7xl font-display font-black uppercase tracking-tighter leading-[0.85] text-black">{item.title}</h2>
+                {isAdmin ? (
+                  <div className="group/title relative z-[70]">
+                    <textarea 
+                      value={tempTitle}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        setTempTitle(e.target.value);
+                      }}
+                      onBlur={() => updateField('title', tempTitle)}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.currentTarget.focus();
+                      }}
+                      className="text-5xl md:text-7xl font-display font-black uppercase tracking-tighter leading-[0.85] text-black bg-white lg:bg-transparent border-none outline-none w-full resize-none h-auto min-h-[1.2em] cursor-text pointer-events-auto relative z-[70]"
+                    />
+                    <Edit2 size={24} className="absolute -left-10 top-4 text-black opacity-0 group-hover/title:opacity-100 transition-opacity" />
+                  </div>
+                ) : (
+                  <h2 className="text-5xl md:text-7xl font-display font-black uppercase tracking-tighter leading-[0.85] text-black">{item.title}</h2>
+                )}
               </div>
               <button 
                 onClick={onClose}
@@ -872,28 +1473,97 @@ const ProjectCard = ({ item, onClose, isAdmin }: { item: PortfolioItem, onClose:
               </button>
             </div>
 
-            <div className="flex flex-wrap gap-8 mb-12 text-[10px] uppercase font-bold tracking-widest text-black/50">
-              <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap gap-8 mb-12 text-[10px] uppercase font-bold tracking-widest text-black/50 relative z-[70]">
+              <div className="flex flex-col gap-1 min-w-[100px]">
                 <span className="opacity-40">Development</span>
-                <span className="flex items-center gap-2 text-black"><Calendar size={12} /> {item.year}</span>
+                {isAdmin ? (
+                  <input 
+                    type="text"
+                    value={tempYear}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setTempYear(e.target.value);
+                    }}
+                    onBlur={() => updateField('year', tempYear)}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.currentTarget.focus();
+                    }}
+                    className="bg-white lg:bg-transparent border-none outline-none text-black hover:text-black transition-colors cursor-text pointer-events-auto relative z-[70]"
+                  />
+                ) : (
+                  <span className="flex items-center gap-2 text-black"><Calendar size={12} /> {item.year || "2026"}</span>
+                )}
               </div>
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1 min-w-[100px]">
                 <span className="opacity-40">Discipline</span>
-                <span className="flex items-center gap-2 text-black"><MapPin size={12} /> {item.category}</span>
+                {isAdmin ? (
+                  <input 
+                    type="text"
+                    value={tempCategory}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setTempCategory(e.target.value);
+                    }}
+                    onBlur={() => updateField('category', tempCategory)}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.currentTarget.focus();
+                    }}
+                    className="bg-white lg:bg-transparent border-none outline-none text-black hover:text-black transition-colors cursor-text pointer-events-auto relative z-[70]"
+                  />
+                ) : (
+                  <span className="flex items-center gap-2 text-black"><MapPin size={12} /> {item.category}</span>
+                )}
               </div>
             </div>
 
-            <div className="space-y-8 text-black/60 leading-relaxed text-sm max-w-[500px]">
-              <p>{item.description || "The conceptualization of modern industrial objects requires a delicate balance between utility and aesthetic purity. This project explores the intersection of raw materiality and high-performance engineering."}</p>
+            <div className="space-y-8 text-black/60 leading-relaxed text-sm max-w-[500px] relative z-[70]">
+              {isAdmin ? (
+                <div className="group/desc relative z-[70]">
+                  <textarea 
+                    value={tempDesc}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setTempDesc(e.target.value);
+                    }}
+                    onBlur={() => updateField('description', tempDesc)}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.currentTarget.focus();
+                    }}
+                    className="bg-white lg:bg-transparent border-none outline-none w-full min-h-[150px] resize-none text-black/60 leading-relaxed cursor-text pointer-events-auto relative z-[70]"
+                  />
+                  <Edit2 size={14} className="absolute -left-6 top-1 text-black opacity-0 group-hover/desc:opacity-100 transition-opacity pointer-events-none" />
+                </div>
+              ) : (
+                <p>{item.description || "The conceptualization of modern industrial objects requires a delicate balance between utility and aesthetic purity. This project explores the intersection of raw materiality and high-performance engineering."}</p>
+              )}
+              
+              {isAdmin && (
+                <div className="space-y-3 pt-6 border-t border-black/5">
+                   <h4 className="text-[9px] uppercase font-bold tracking-widest opacity-40">Advanced Specs</h4>
+                   <div className="space-y-2">
+                     <label className="flex items-center gap-2 text-[10px] group/url">
+                       <Box size={10} className="opacity-40 group-hover/url:opacity-100" />
+                       <input 
+                         type="text"
+                         placeholder="STL/GLB URL"
+                         defaultValue={item.stlUrl || ""}
+                         onBlur={(e) => updateField('stlUrl', e.target.value)}
+                         className="flex-1 bg-transparent border-none outline-none font-mono text-[9px] opacity-40 hover:opacity-100 focus:opacity-100 text-black"
+                       />
+                     </label>
+                   </div>
+                </div>
+              )}
+
               {item.stlUrl && <p className="opacity-40 text-xs italic">Use your mouse to orbit and scroll to zoom in the 3D viewer above.</p>}
               <div className="w-20 h-[1px] bg-black/10" />
             </div>
-          </div>
-
-          <div className="pt-12 flex gap-4">
-             {/* <button className="h-16 flex-1 bg-black text-white font-bold uppercase tracking-widest text-[11px] flex items-center justify-center gap-3 hover:bg-zinc-800 transition-all shadow-lg active:scale-95">
-               Download Technical Specs <ExternalLink size={16} />
-             </button> */}
           </div>
         </div>
       </motion.div>
@@ -947,6 +1617,12 @@ const DropZone = ({ onFileSelected, label, accept }: { onFileSelected: (file: Fi
 const AdminPanel = ({ data, onClose }: { data: PortfolioData, onClose: () => void }) => {
   const [editingItem, setEditingItem] = useState<PortfolioItem | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [tempName, setTempName] = useState(data.ownerName);
+
+  // Sync tempName if data changes externally
+  useEffect(() => {
+    setTempName(data.ownerName);
+  }, [data.ownerName]);
 
   const addItem = async () => {
     const id = Date.now().toString();
@@ -982,17 +1658,21 @@ const AdminPanel = ({ data, onClose }: { data: PortfolioData, onClose: () => voi
   };
 
   const updateItem = async (updated: PortfolioItem) => {
+    // Update local state immediately for responsiveness
+    setEditingItem(updated);
+    
     const { id, ...rest } = updated;
     try {
       await updateDoc(doc(db, 'projects', id), rest);
     } catch (err: any) {
       console.error("Update failed:", err);
-      alert(`Update failed: ${err.message}`);
+      // We don't alert on every keystroke to avoid interrupting the user, 
+      // but maybe show a subtle indicator if it fails consistently
     }
   };
 
-  const updateSettings = async (name: string) => {
-    await updateDoc(doc(db, 'settings', 'portfolio'), { ownerName: name });
+  const updateSettings = async (field: string, value: any) => {
+    await updateDoc(doc(db, 'settings', 'portfolio'), { [field]: value });
   };
 
   const seedData = async () => {
@@ -1062,9 +1742,9 @@ const AdminPanel = ({ data, onClose }: { data: PortfolioData, onClose: () => voi
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      className="fixed inset-y-0 right-0 w-full md:w-[480px] bg-white z-[150] shadow-2xl flex flex-col border-l border-black/10"
+      className="fixed inset-y-0 right-0 w-full md:w-[480px] z-[150] shadow-2xl flex flex-col border-l border-white/20 bg-zinc-50"
     >
-      <div className="p-8 border-b border-black/5 flex justify-between items-center bg-zinc-50/50">
+      <div className="p-8 border-b border-black/5 flex justify-between items-center bg-zinc-50">
         <h2 className="text-2xl font-display font-bold uppercase tracking-tighter">Inventory Control</h2>
         <button onClick={onClose} className="p-2 hover:bg-black/5 transition-colors text-black">
           <X size={20} />
@@ -1073,14 +1753,199 @@ const AdminPanel = ({ data, onClose }: { data: PortfolioData, onClose: () => voi
 
       <div className="flex-1 overflow-y-auto p-8 space-y-10 hide-scrollbar text-black">
         <section>
-          <h3 className="text-[10px] uppercase font-mono tracking-widest text-zinc-400 mb-4 font-bold">Metadata</h3>
+          <h3 className="text-[10px] uppercase font-mono tracking-widest text-zinc-400 mb-4 font-bold">Metadata / CV</h3>
           <div className="space-y-4">
             <input 
-              className="w-full border-b border-black text-xl font-display font-bold uppercase tracking-tighter p-2 outline-none focus:border-blue-500"
-              value={data.ownerName}
-              onChange={(e) => updateSettings(e.target.value)}
+              className="w-full border-b border-black text-xl font-display font-bold uppercase tracking-tighter p-2 outline-none focus:border-black relative z-[151] pointer-events-auto"
+              value={tempName}
+              onPointerDown={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                setTempName(e.target.value);
+                updateSettings('ownerName', e.target.value);
+              }}
               placeholder="NAME"
             />
+            
+            <div className="space-y-8 pt-4 border-t border-black/5">
+               <div className="space-y-4">
+                 <div className="flex justify-between items-center">
+                   <label className="text-[9px] uppercase font-bold tracking-widest opacity-40">Work Experience</label>
+                   <button 
+                    onClick={() => {
+                      const newExp = { id: Date.now().toString(), title: '', subtitle: '', date: '', description: '' };
+                      updateSettings('workExperience', [...(data.workExperience || []), newExp]);
+                    }}
+                    className="text-[9px] uppercase font-bold tracking-widest bg-black text-white px-2 py-1 rounded-sm"
+                   >
+                     + Add
+                   </button>
+                 </div>
+                 <div className="space-y-4">
+                   {Array.isArray(data.workExperience) && data.workExperience.map((exp, idx) => (
+                     <div key={exp.id} className="space-y-2 p-3 border border-black/10 bg-zinc-50/30">
+                        <div className="grid grid-cols-2 gap-2">
+                          <input 
+                            placeholder="Title" 
+                            className="w-full border-b border-black/10 p-1 text-[11px] outline-none" 
+                            value={exp.title} 
+                            onChange={(e) => {
+                              const newList = [...(data.workExperience || [])];
+                              newList[idx] = { ...exp, title: e.target.value };
+                              updateSettings('workExperience', newList);
+                            }}
+                          />
+                          <input 
+                            placeholder="Date" 
+                            className="w-full border-b border-black/10 p-1 text-[11px] outline-none text-right" 
+                            value={exp.date} 
+                            onChange={(e) => {
+                              const newList = [...(data.workExperience || [])];
+                              newList[idx] = { ...exp, date: e.target.value };
+                              updateSettings('workExperience', newList);
+                            }}
+                          />
+                        </div>
+                        <input 
+                          placeholder="Company — Location" 
+                          className="w-full border-b border-black/10 p-1 text-[11px] outline-none" 
+                          value={exp.subtitle} 
+                          onChange={(e) => {
+                            const newList = [...(data.workExperience || [])];
+                            newList[idx] = { ...exp, subtitle: e.target.value };
+                            updateSettings('workExperience', newList);
+                          }}
+                        />
+                        <textarea 
+                          placeholder="Description" 
+                          className="w-full border border-black/10 p-2 text-[11px] h-20 outline-none" 
+                          value={exp.description} 
+                          onChange={(e) => {
+                            const newList = [...(data.workExperience || [])];
+                            newList[idx] = { ...exp, description: e.target.value };
+                            updateSettings('workExperience', newList);
+                          }}
+                        />
+                        <button 
+                          onClick={() => {
+                            const newList = data.workExperience?.filter(e => e.id !== exp.id);
+                            updateSettings('workExperience', newList);
+                          }}
+                          className="text-[8px] text-red-500 uppercase font-bold"
+                        >
+                          Remove
+                        </button>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+
+               <div className="space-y-4 pt-4 border-t border-black/5">
+                 <div className="flex justify-between items-center">
+                   <label className="text-[9px] uppercase font-bold tracking-widest opacity-40">Education</label>
+                   <button 
+                    onClick={() => {
+                      const newEdu = { id: Date.now().toString(), title: '', subtitle: '', date: '', description: '' };
+                      updateSettings('education', [...(data.education || []), newEdu]);
+                    }}
+                    className="text-[9px] uppercase font-bold tracking-widest bg-black text-white px-2 py-1 rounded-sm"
+                   >
+                     + Add
+                   </button>
+                 </div>
+                 <div className="space-y-4">
+                   {Array.isArray(data.education) && data.education.map((edu, idx) => (
+                     <div key={edu.id} className="space-y-2 p-3 border border-black/10 bg-zinc-50/30">
+                        <div className="grid grid-cols-2 gap-2">
+                          <input 
+                            placeholder="Degree" 
+                            className="w-full border-b border-black/10 p-1 text-[11px] outline-none" 
+                            value={edu.title} 
+                            onChange={(e) => {
+                              const newList = [...(data.education || [])];
+                              newList[idx] = { ...edu, title: e.target.value };
+                              updateSettings('education', newList);
+                            }}
+                          />
+                          <input 
+                            placeholder="Period" 
+                            className="w-full border-b border-black/10 p-1 text-[11px] outline-none text-right" 
+                            value={edu.date} 
+                            onChange={(e) => {
+                              const newList = [...(data.education || [])];
+                              newList[idx] = { ...edu, date: e.target.value };
+                              updateSettings('education', newList);
+                            }}
+                          />
+                        </div>
+                        <input 
+                          placeholder="Institution — Location" 
+                          className="w-full border-b border-black/10 p-1 text-[11px] outline-none" 
+                          value={edu.subtitle} 
+                          onChange={(e) => {
+                            const newList = [...(data.education || [])];
+                            newList[idx] = { ...edu, subtitle: e.target.value };
+                            updateSettings('education', newList);
+                          }}
+                        />
+                        <textarea 
+                          placeholder="Description" 
+                          className="w-full border border-black/10 p-2 text-[11px] h-20 outline-none" 
+                          value={edu.description} 
+                          onChange={(e) => {
+                            const newList = [...(data.education || [])];
+                            newList[idx] = { ...edu, description: e.target.value };
+                            updateSettings('education', newList);
+                          }}
+                        />
+                        <button 
+                          onClick={() => {
+                            const newList = data.education?.filter(e => e.id !== edu.id);
+                            updateSettings('education', newList);
+                          }}
+                          className="text-[8px] text-red-500 uppercase font-bold"
+                        >
+                          Remove
+                        </button>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+               
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold tracking-widest opacity-40">Modeling</label>
+                    <input 
+                      className="w-full border-b border-black/10 p-1 text-[11px] outline-none focus:border-black"
+                      value={data.modeling || ''}
+                      onChange={(e) => updateSettings('modeling', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold tracking-widest opacity-40">Soft Skill</label>
+                    <input 
+                      className="w-full border-b border-black/10 p-1 text-[11px] outline-none focus:border-black"
+                      value={data.softSkill || ''}
+                      onChange={(e) => updateSettings('softSkill', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold tracking-widest opacity-40">Visualization</label>
+                    <input 
+                      className="w-full border-b border-black/10 p-1 text-[11px] outline-none focus:border-black"
+                      value={data.visualization || ''}
+                      onChange={(e) => updateSettings('visualization', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] uppercase font-bold tracking-widest opacity-40">Prototyping</label>
+                    <input 
+                      className="w-full border-b border-black/10 p-1 text-[11px] outline-none focus:border-black"
+                      value={data.prototyping || ''}
+                      onChange={(e) => updateSettings('prototyping', e.target.value)}
+                    />
+                  </div>
+               </div>
+            </div>
           </div>
         </section>
 
@@ -1216,10 +2081,21 @@ const AdminPanel = ({ data, onClose }: { data: PortfolioData, onClose: () => voi
 
               <div className="space-y-5 mt-8">
                 <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-bold tracking-[0.2em] opacity-40">Label (e.g. Case Study 2026)</label>
+                  <input 
+                    className="w-full border-b border-black p-2 outline-none focus:border-blue-500 font-bold uppercase transition-all relative z-[170] pointer-events-auto"
+                    value={editingItem.label || ''}
+                    placeholder="Case Study 2026"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onChange={(e) => updateItem({ ...editingItem, label: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
                   <label className="text-[9px] uppercase font-bold tracking-[0.2em] opacity-40">Project Name</label>
                   <input 
-                    className="w-full border-b border-black p-2 outline-none focus:border-blue-500 font-bold uppercase transition-all"
+                    className="w-full border-b border-black p-2 outline-none focus:border-blue-500 font-bold uppercase transition-all relative z-[170] pointer-events-auto"
                     value={editingItem.title}
+                    onPointerDown={(e) => e.stopPropagation()}
                     onChange={(e) => updateItem({ ...editingItem, title: e.target.value })}
                   />
                 </div>
@@ -1227,16 +2103,18 @@ const AdminPanel = ({ data, onClose }: { data: PortfolioData, onClose: () => voi
                   <div className="space-y-1">
                     <label className="text-[9px] uppercase font-bold tracking-[0.2em] opacity-40">Discipline</label>
                     <input 
-                      className="w-full border-b border-zinc-200 p-2 outline-none focus:border-black text-sm uppercase"
+                      className="w-full border-b border-zinc-200 p-2 outline-none focus:border-black text-sm uppercase relative z-[170] pointer-events-auto"
                       value={editingItem.category}
+                      onPointerDown={(e) => e.stopPropagation()}
                       onChange={(e) => updateItem({ ...editingItem, category: e.target.value })}
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] uppercase font-bold tracking-[0.2em] opacity-40">Year</label>
                     <input 
-                      className="w-full border-b border-zinc-200 p-2 outline-none focus:border-black text-sm"
+                      className="w-full border-b border-zinc-200 p-2 outline-none focus:border-black text-sm relative z-[170] pointer-events-auto"
                       value={editingItem.year || ''}
+                      onPointerDown={(e) => e.stopPropagation()}
                       onChange={(e) => updateItem({ ...editingItem, year: e.target.value })}
                     />
                   </div>
@@ -1244,8 +2122,9 @@ const AdminPanel = ({ data, onClose }: { data: PortfolioData, onClose: () => voi
                 <div className="space-y-1">
                   <label className="text-[9px] uppercase font-bold tracking-[0.2em] opacity-40">Mission Description</label>
                   <textarea 
-                    className="w-full border border-zinc-100 p-4 outline-none focus:border-black text-sm min-h-[140px] resize-none bg-zinc-50/30"
+                    className="w-full border border-zinc-100 p-4 outline-none focus:border-black text-sm min-h-[140px] resize-none bg-zinc-50/30 relative z-[170] pointer-events-auto"
                     value={editingItem.description || ''}
+                    onPointerDown={(e) => e.stopPropagation()}
                     onChange={(e) => updateItem({ ...editingItem, description: e.target.value })}
                   />
                 </div>
@@ -1253,15 +2132,17 @@ const AdminPanel = ({ data, onClose }: { data: PortfolioData, onClose: () => voi
                   <label className="text-[9px] uppercase font-bold tracking-[0.2em] opacity-40">Source URLs (Advanced)</label>
                   <div className="space-y-2">
                     <input 
-                      className="w-full border border-zinc-100 p-2 outline-none focus:border-black text-[9px] font-mono"
+                      className="w-full border border-zinc-100 p-2 outline-none focus:border-black text-[9px] font-mono relative z-[170] pointer-events-auto"
                       placeholder="Image URL"
                       value={editingItem.imageUrl}
+                      onPointerDown={(e) => e.stopPropagation()}
                       onChange={(e) => updateItem({ ...editingItem, imageUrl: e.target.value })}
                     />
                     <input 
-                      className="w-full border border-zinc-100 p-2 outline-none focus:border-black text-[9px] font-mono"
+                      className="w-full border border-zinc-100 p-2 outline-none focus:border-black text-[9px] font-mono relative z-[170] pointer-events-auto"
                       placeholder="Model URL (stl, glb, fbx)"
                       value={editingItem.stlUrl || ''}
+                      onPointerDown={(e) => e.stopPropagation()}
                       onChange={(e) => updateItem({ ...editingItem, stlUrl: e.target.value })}
                     />
                   </div>
@@ -1283,12 +2164,49 @@ const AdminPanel = ({ data, onClose }: { data: PortfolioData, onClose: () => voi
 };
 
 export default function App() {
-  const { data, loading } = usePortfolioData();
+  const { data, loading: dataLoading } = usePortfolioData();
   const [isAdmin, setIsAdmin] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [selectedItem, setSelectedItem] = useState<PortfolioItem | null>(null);
   const [activeView, setActiveView] = useState<ViewState>('work');
   const [showAdminInterface, setShowAdminInterface] = useState(false);
+  const [imagesPreloaded, setImagesPreloaded] = useState(false);
+
+  // Preload all portfolio item standard images
+  useEffect(() => {
+    if (!dataLoading && data.items) {
+      if (data.items.length === 0) {
+        setImagesPreloaded(true);
+        return;
+      }
+
+      const imageUrls = data.items
+        .map(item => item.imageUrl)
+        .filter(Boolean);
+
+      if (imageUrls.length === 0) {
+        setImagesPreloaded(true);
+        return;
+      }
+
+      let loadedCount = 0;
+      const total = imageUrls.length;
+
+      const handleImageLoad = () => {
+        loadedCount++;
+        if (loadedCount >= total) {
+          setImagesPreloaded(true);
+        }
+      };
+
+      imageUrls.forEach(url => {
+        const img = new Image();
+        img.src = url;
+        img.onload = handleImageLoad;
+        img.onerror = handleImageLoad; // Fallback to avoid blocking on bad Image URLs
+      });
+    }
+  }, [dataLoading, data.items]);
 
   // URL listener for /admin
   useEffect(() => {
@@ -1333,7 +2251,7 @@ export default function App() {
     }
   }, [isAdmin, selectedItem]);
 
-  if (loading) {
+  if (dataLoading || !imagesPreloaded) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-white">
         <motion.div 
@@ -1353,7 +2271,7 @@ export default function App() {
             <Logo className="w-24 h-48" />
           </motion.div>
           <div className="flex flex-col items-center gap-3">
-            <span className="text-[10px] font-mono uppercase tracking-[0.5em] opacity-40">Initializing Data Stream</span>
+            <span className="text-[10px] font-mono uppercase tracking-[0.5em] opacity-40">Initializing</span>
             <div className="w-16 h-[1px] bg-black/5 overflow-hidden">
               <motion.div 
                 animate={{ x: [-64, 64] }} 
@@ -1392,7 +2310,7 @@ export default function App() {
               <ThreeDCarousel items={data.items} onSelectItem={setSelectedItem} />
             </motion.div>
           ) : (
-            <AboutPage key="about" />
+            <CVPage key="about" data={data} />
           )}
         </AnimatePresence>
       </main>
